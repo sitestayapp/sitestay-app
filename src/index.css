@@ -8,51 +8,51 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* SiteStayApp palette: warm cream bg #F5F2EB, corporate green #2D6A4F, ink #0A0A0A */
+    --background: 42 27% 94%;
+    --foreground: 0 0% 4%;
 
     --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card-foreground: 0 0% 4%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover-foreground: 0 0% 4%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 152 41% 30%;
+    --primary-foreground: 42 27% 96%;
+    --primary-glow: 152 41% 42%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 42 22% 88%;
+    --secondary-foreground: 0 0% 4%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 42 18% 90%;
+    --muted-foreground: 0 0% 35%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 152 30% 92%;
+    --accent-foreground: 152 41% 22%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border: 42 18% 84%;
+    --input: 42 18% 84%;
+    --ring: 152 41% 30%;
 
-    --radius: 0.5rem;
+    --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 98%;
+    --gradient-hero: linear-gradient(135deg, hsl(152 41% 22%), hsl(152 41% 38%));
+    --gradient-soft: linear-gradient(180deg, hsl(42 27% 96%), hsl(42 22% 90%));
+    --shadow-elegant: 0 20px 50px -20px hsl(152 41% 22% / 0.25);
+    --shadow-soft: 0 4px 20px -8px hsl(0 0% 4% / 0.08);
 
-    --sidebar-foreground: 240 5.3% 26.1%;
-
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --sidebar-background: 42 25% 96%;
+    --sidebar-foreground: 0 0% 12%;
+    --sidebar-primary: 152 41% 30%;
+    --sidebar-primary-foreground: 42 27% 96%;
+    --sidebar-accent: 42 22% 90%;
+    --sidebar-accent-foreground: 152 41% 22%;
+    --sidebar-border: 42 18% 84%;
+    --sidebar-ring: 152 41% 30%;
   }
 
   .dark {
@@ -101,5 +101,11 @@ All colors MUST be HSL.
 
   body {
     @apply bg-background text-foreground;
+    font-family: 'DM Sans', system-ui, sans-serif;
+    font-feature-settings: "ss01", "cv11";
+  }
+  h1, h2, h3, h4, .font-display {
+    font-family: 'Syne', system-ui, sans-serif;
+    letter-spacing: -0.02em;
   }
 }
