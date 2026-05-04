@@ -67,7 +67,7 @@ serve(async (req) => {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-20250514",
+        model: "claude-sonnet-4-5-20250929",
         max_tokens: 2048,
         system: SYSTEM_PROMPT,
         stream: true,
@@ -83,7 +83,7 @@ serve(async (req) => {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      return new Response(JSON.stringify({ error: "Error del modelo de IA" }), {
+      return new Response(JSON.stringify({ error: "Error del modelo de IA", status: response.status, detail: text }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
