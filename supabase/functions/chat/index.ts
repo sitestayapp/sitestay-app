@@ -83,7 +83,7 @@ serve(async (req) => {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      return new Response(JSON.stringify({ error: "Error del modelo de IA" }), {
+      return new Response(JSON.stringify({ error: "Error del modelo de IA", status: response.status, detail: text }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
