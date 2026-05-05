@@ -1,6 +1,6 @@
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { MessageSquare, CalendarRange, Settings, LogOut, Plus } from "lucide-react";
+import { MessageSquare, CalendarRange, Settings, LogOut, Plus, LayoutDashboard, Building2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -40,7 +40,15 @@ export default function DashboardLayout() {
           <Link to="/dashboard" className="font-display text-xl font-bold">
             SiteStay<span className="text-primary">App</span>
           </Link>
-          <p className="text-xs text-muted-foreground mt-1 truncate">{empresa || user?.email}</p>
+          <div className="flex items-center gap-2 mt-3">
+            <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-display font-bold text-sm shrink-0">
+              {(empresa || user?.email || "?").slice(0, 1).toUpperCase()}
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-semibold truncate">{empresa || "Tu empresa"}</div>
+              <div className="text-[11px] text-muted-foreground truncate">{user?.email}</div>
+            </div>
+          </div>
         </div>
 
         <div className="p-3">
@@ -50,8 +58,10 @@ export default function DashboardLayout() {
         </div>
 
         <nav className="px-3 space-y-1">
+          <SidebarLink to="/dashboard" icon={LayoutDashboard} label="Resumen" end />
           <SidebarLink to="/dashboard/chat" icon={MessageSquare} label="Chat" />
           <SidebarLink to="/dashboard/reservations" icon={CalendarRange} label="Reservas" />
+          <div className="my-2 border-t border-sidebar-border/60" />
           <SidebarLink to="/dashboard/settings" icon={Settings} label="Ajustes" />
         </nav>
 
@@ -98,11 +108,11 @@ export default function DashboardLayout() {
   );
 }
 
-function SidebarLink({ to, icon: Icon, label }: { to: string; icon: any; label: string }) {
+function SidebarLink({ to, icon: Icon, label, end }: { to: string; icon: any; label: string; end?: boolean }) {
   return (
     <NavLink
       to={to}
-      end={to === "/dashboard/chat"}
+      end={end ?? to === "/dashboard/chat"}
       className={({ isActive }) =>
         `flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
           isActive ? "bg-primary text-primary-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent"
