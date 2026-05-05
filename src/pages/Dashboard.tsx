@@ -47,7 +47,7 @@ export default function Dashboard() {
       (r) => r.estado === "confirmada" && (!r.fecha_fin || new Date(r.fecha_fin) >= now),
     );
     const gastoMes = rows
-      .filter((r) => r.created_at_ok || (r.fecha_inicio && new Date(r.fecha_inicio) >= startOfMonth))
+      .filter((r) => r.fecha_inicio && new Date(r.fecha_inicio) >= startOfMonth)
       .reduce((s, r) => s + (Number(r.precio) || 0), 0);
     const proxima = activas
       .filter((r) => r.fecha_inicio && new Date(r.fecha_inicio) >= now)
