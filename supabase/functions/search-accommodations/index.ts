@@ -29,13 +29,14 @@ async function searchBooking(key: string, q: SearchInput) {
     throw new Error(`Booking dest ${destRes.status}: ${t.slice(0, 200)}`);
   }
   const destJson = await destRes.json();
-  console.log("[search] dest result:", JSON.stringify(destJson?.data?.[0] ?? null));
-  const dest = destJson?.data?.[0];
-  if (!dest) return [];
+  console.log("[search] dest full:", JSON.stringify(destJson).slice(0, 500));
+  const dest = destJson?.data?.[0] ?? destJson?.result?.[0];
+  if (!dest) throw new Error(`Sin destino para "${q.ciudad}". Respuesta: ${JSON.stringify(destJson).slice(0, 200)}`);
+  console.log("[search] dest picked:", dest.dest_id, dest.dest_type, dest.name);
 
   const url = new URL("https://booking-com15.p.rapidapi.com/api/v1/hotels/searchHotels");
   url.searchParams.set("dest_id", String(dest.dest_id));
-  url.searchParams.set("search_type", String(dest.search_type ?? "CITY"));
+  url.searchParams.set("search_type", "CITY");
   url.searchParams.set("arrival_date", q.check_in);
   url.searchParams.set("departure_date", q.check_out);
   url.searchParams.set("adults", String(adults));
@@ -54,8 +55,12 @@ async function searchBooking(key: string, q: SearchInput) {
     throw new Error(`Booking search ${res.status}: ${t.slice(0, 200)}`);
   }
   const json = await res.json();
-  const hotels = json?.data?.hotels ?? [];
-  console.log(`[search] hotels found: ${hotels.length}`);
+  const hotels = json?.data?.hotels ?? json?.result?.hotels ?? json?.result ?? [];
+  console.log(`[search] hotels found: ${hotels.length} | url: ${url.toString()}`);
+  if (hotels.length === 0) {
+    console.log("[search] empty response sample:", JSON.stringify(json).slice(0, 500));
+    if (json?.message) throw new Error(`Booking: ${Array.isArray(json.message) ? json.message.join("; ") : json.message}`);
+  }
 
   const nights = Math.max(
     1,
@@ -66,25 +71,28 @@ async function searchBooking(key: string, q: SearchInput) {
     const p = h?.property ?? {};
     const total = p?.priceBreakdown?.grossPrice?.value ?? null;
     const perNight = total ? +(total / nights).toFixed(2) : null;
+    const hotelId = p?.id ?? h?.hotel_id;
     return {
       provider: "booking",
-      id: String(p?.id ?? h?.hotel_id ?? crypto.randomUUID()),
-      nombre: p?.name ?? "Sin nombre",
-      ciudad: q.ciudad,
-      precio_noche: perNight,
-      precio_total: total ? +total.toFixed(2) : null,
-      moneda: p?.priceBreakdown?.grossPrice?.currency ?? "EUR",
-      valoracion: p?.reviewScore ?? null,
-      reviews: p?.reviewCount ?? null,
+      id: String(hotelId ?? crypto.randomUUID()),
+      name: p?.name ?? h?.hotel_name ?? "Sin nombre",
+      price_per_night: perNight,
+      price_total: total ? +total.toFixed(2) : null,
+      currency: p?.priceBreakdown?.grossPrice?.currency ?? "EUR",
+      rating: p?.reviewScore ?? h?.review_score ?? null,
+      reviews: p?.reviewCount ?? h?.review_nr ?? null,
+      address: h?.address ?? p?.wishlistName ?? q.ciudad,
+      checkin: q.check_in,
+      checkout: q.check_out,
       cancelacion_gratis: !!p?.isFreeCancellable,
-      foto: Array.isArray(p?.photoUrls) ? p.photoUrls[0] : null,
-      url: p?.id ? `https://www.booking.com/hotel/-/-/${p.id}.html` : null,
+      photos: Array.isArray(p?.photoUrls) ? p.photoUrls : (h?.main_photo_url ? [h.main_photo_url] : []),
+      url: hotelId ? `https://www.booking.com/hotel/-/-/${hotelId}.html` : null,
       tipo: q.tipo ?? "hotel",
     };
   });
 
   return q.max_precio
-    ? items.filter((i: any) => !i.precio_noche || i.precio_noche <= q.max_precio!)
+    ? items.filter((i: any) => !i.price_per_night || i.price_per_night <= q.max_precio!)
     : items;
 }
 
