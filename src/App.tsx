@@ -7,6 +7,7 @@ import Landing from "./pages/Landing";
 import AuthPage from "./pages/Auth";
 import DashboardLayout from "./components/DashboardLayout";
 import Chat from "./pages/Chat";
+import Dashboard from "./pages/Dashboard";
 import Reservations from "./pages/Reservations";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
@@ -27,7 +28,7 @@ const App = () => (
             <Route path="/login" element={<AuthPage mode="login" />} />
             <Route path="/register" element={<AuthPage mode="register" />} />
             <Route path="/dashboard" element={<ProtectedRoute><DashboardLayout /></ProtectedRoute>}>
-              <Route index element={<Navigate to="chat" replace />} />
+              <Route index element={<Dashboard />} />
               <Route path="chat" element={<Chat />} />
               <Route path="chat/:id" element={<Chat />} />
               <Route path="reservations" element={<Reservations />} />

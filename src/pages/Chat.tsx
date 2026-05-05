@@ -6,8 +6,23 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
+import OptionCard, { AccommodationOption } from "@/components/chat/OptionCard";
 
-type Msg = { id?: string; role: "user" | "assistant"; content: string };
+type Msg = { id?: string; role: "user" | "assistant"; content: string; options?: AccommodationOption[] };
+
+const OPTIONS_MARKER_RE = /\n*<!--OPTIONS:(.*?)-->\n*/s;
+
+function parseStored(content: string): { text: string; options?: AccommodationOption[] } {
+  const m = content.match(OPTIONS_MARKER_RE);
+  if (!m) return { text: content };
+  try {
+    const opts = JSON.parse(m[1]);
+    return { text: content.replace(OPTIONS_MARKER_RE, "").trim(), options: opts };
+  } catch {
+    return { text: content };
+  }
+}
 
 const SUGGESTIONS = [
   "Necesito un apartamento en Bilbao para 2 personas del 10 al 14 de junio, máx. 120€/noche.",
@@ -32,7 +47,16 @@ export default function Chat() {
   useEffect(() => {
     if (!conversationId || !user) { setMessages([]); return; }
     supabase.from("messages").select("id, role, content").eq("conversation_id", conversationId).order("created_at")
-      .then(({ data }) => { if (data) setMessages(data as Msg[]); });
+      .then(({ data }) => {
+        if (data) {
+          setMessages(
+            data.map((d: any) => {
+              const parsed = parseStored(d.content ?? "");
+              return { id: d.id, role: d.role, content: parsed.text, options: parsed.options };
+            }),
+          );
+        }
+      });
   }, [conversationId, user]);
 
   useEffect(() => {
@@ -56,7 +80,7 @@ export default function Chat() {
     }
 
     const userMsg: Msg = { role: "user", content: text };
-    setMessages((m) => [...m, userMsg, { role: "assistant", content: "" }]);
+    setMessages((m) => [...m, userMsg, { role: "assistant", content: "", options: undefined }]);
     setInput("");
 
     await supabase.from("messages").insert({ conversation_id: cid, user_id: user.id, role: "user", content: text });
@@ -86,6 +110,7 @@ export default function Chat() {
       const decoder = new TextDecoder();
       let buf = "";
       let assistantText = "";
+      let assistantOptions: AccommodationOption[] | undefined;
       let done = false;
       while (!done) {
         const { done: d, value } = await reader.read();
@@ -105,7 +130,15 @@ export default function Chat() {
               assistantText += evt.delta;
               setMessages((m) => {
                 const copy = [...m];
-                copy[copy.length - 1] = { role: "assistant", content: assistantText };
+                copy[copy.length - 1] = { role: "assistant", content: assistantText, options: assistantOptions };
+                return copy;
+              });
+            }
+            if (evt.options) {
+              assistantOptions = evt.options;
+              setMessages((m) => {
+                const copy = [...m];
+                copy[copy.length - 1] = { role: "assistant", content: assistantText, options: assistantOptions };
                 return copy;
               });
             }
@@ -114,8 +147,11 @@ export default function Chat() {
       }
 
       if (assistantText) {
+        const stored = assistantOptions
+          ? `${assistantText}\n\n<!--OPTIONS:${JSON.stringify(assistantOptions)}-->`
+          : assistantText;
         await supabase.from("messages").insert({
-          conversation_id: cid, user_id: user.id, role: "assistant", content: assistantText,
+          conversation_id: cid, user_id: user.id, role: "assistant", content: stored,
         });
         await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", cid);
       }
@@ -125,6 +161,12 @@ export default function Chat() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const chooseOption = (opt: AccommodationOption, index: number) => {
+    const total = opt.price_total ? ` (total ${Math.round(opt.price_total)}€)` : "";
+    const pn = opt.price_per_night ? ` a ${Math.round(opt.price_per_night)}€/noche${total}` : "";
+    send(`Elijo opción ${index + 1}: ${opt.name}${pn}. Procede a reservar.`);
   };
 
   const isEmpty = messages.length === 0;
@@ -161,14 +203,33 @@ export default function Chat() {
           )}
 
           {messages.map((m, i) => (
-            <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div key={i} className={`flex flex-col gap-3 ${m.role === "user" ? "items-end" : "items-start"}`}>
               <div className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                 m.role === "user"
                   ? "bg-primary text-primary-foreground"
                   : "bg-card border border-border shadow-soft"
               }`}>
-                <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{m.content || (loading && i === messages.length - 1 ? "…" : "")}</pre>
+                {m.role === "assistant" ? (
+                  <div className="prose prose-sm max-w-none text-sm leading-relaxed [&_p]:my-1">
+                    <ReactMarkdown>{m.content || (loading && i === messages.length - 1 ? "…" : "")}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed">{m.content}</pre>
+                )}
               </div>
+              {m.options && m.options.length > 0 && (
+                <div className="w-full max-w-[95%] grid gap-3">
+                  {m.options.map((opt, idx) => (
+                    <OptionCard
+                      key={opt.id ?? idx}
+                      option={opt}
+                      index={idx}
+                      onChoose={chooseOption}
+                      disabled={loading}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           ))}
         </div>
