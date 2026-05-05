@@ -98,10 +98,10 @@ async function runTool(name: string, input: any, ctx: { userId: string | null; a
     });
     const json = await res.json();
     console.log("[chat] buscar_alojamientos status:", res.status, "count:", Array.isArray(json?.results) ? json.results.length : "n/a", "error:", json?.error ?? null);
-    return JSON.stringify(json).slice(0, 12000);
+    return { text: JSON.stringify(json).slice(0, 12000), options: Array.isArray(json?.results) ? json.results.slice(0, 5) : [] };
   }
   if (name === "crear_reserva") {
-    if (!ctx.userId) return JSON.stringify({ error: "Usuario no autenticado" });
+    if (!ctx.userId) return { text: JSON.stringify({ error: "Usuario no autenticado" }) };
     const supa = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -118,10 +118,38 @@ async function runTool(name: string, input: any, ctx: { userId: string | null; a
       estado: "confirmada",
       factura_solicitada: true,
     }).select().single();
-    if (error) return JSON.stringify({ error: error.message });
-    return JSON.stringify({ ok: true, id: data.id });
+    if (error) return { text: JSON.stringify({ error: error.message }) };
+
+    // Fire-and-forget email to worker via send-transactional-email
+    try {
+      const emailRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-transactional-email`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
+        },
+        body: JSON.stringify({
+          templateName: "booking-confirmation",
+          recipientEmail: input.trabajador_contacto,
+          idempotencyKey: `booking-${data.id}`,
+          templateData: {
+            name: input.trabajador_nombre,
+            ciudad: input.ciudad,
+            alojamiento: input.alojamiento,
+            fecha_inicio: input.fecha_inicio,
+            fecha_fin: input.fecha_fin,
+            precio: input.precio,
+          },
+        }),
+      });
+      console.log("[chat] email send status:", emailRes.status);
+    } catch (e) {
+      console.error("[chat] email send failed", e);
+    }
+
+    return { text: JSON.stringify({ ok: true, id: data.id }) };
   }
-  return JSON.stringify({ error: "Herramienta desconocida" });
+  return { text: JSON.stringify({ error: "Herramienta desconocida" }) };
 }
 
 serve(async (req) => {
@@ -159,6 +187,8 @@ serve(async (req) => {
       async start(controller) {
         const send = (delta: string) =>
           controller.enqueue(encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`));
+        const sendEvent = (obj: any) =>
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(obj)}\n\n`));
         try {
           for (let turn = 0; turn < 6; turn++) {
             const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -198,11 +228,14 @@ serve(async (req) => {
 
             const toolResults = [];
             for (const tu of toolUses) {
-              const result = await runTool(tu.name, tu.input, { userId, authHeader });
+              const result: any = await runTool(tu.name, tu.input, { userId, authHeader });
+              if (result?.options && Array.isArray(result.options) && result.options.length) {
+                sendEvent({ options: result.options });
+              }
               toolResults.push({
                 type: "tool_result",
                 tool_use_id: tu.id,
-                content: result,
+                content: typeof result === "string" ? result : result.text,
               });
             }
             convo.push({ role: "user", content: toolResults });
