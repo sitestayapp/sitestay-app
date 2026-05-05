@@ -29,6 +29,8 @@ BÚSQUEDA:
 - Cuando tengas ciudad y fechas, llama a la herramienta buscar_alojamientos.
 - Presenta entre 3 y 5 opciones reales en el formato indicado.
 - No inventes precios ni alojamientos: usa solo los devueltos por la herramienta.
+- Si la herramienta devuelve un campo "error", muéstralo literalmente al usuario (no digas "sin disponibilidad"). Ejemplo: "Error en la búsqueda: <texto>".
+- Solo di "no hay resultados" si la herramienta devuelve "results": [] explícitamente vacío.
 
 FORMATO DE OPCIONES:
 Opción 1 — [nombre]
@@ -95,6 +97,7 @@ async function runTool(name: string, input: any, ctx: { userId: string | null; a
       body: JSON.stringify(input),
     });
     const json = await res.json();
+    console.log("[chat] buscar_alojamientos status:", res.status, "count:", Array.isArray(json?.results) ? json.results.length : "n/a", "error:", json?.error ?? null);
     return JSON.stringify(json).slice(0, 12000);
   }
   if (name === "crear_reserva") {
