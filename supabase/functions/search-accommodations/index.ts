@@ -16,14 +16,20 @@ type SearchInput = {
 
 async function searchBooking(key: string, q: SearchInput) {
   const adults = q.adultos ?? 1;
+  console.log("[search] input:", JSON.stringify(q));
   // 1) Resolve destination
   const destUrl = new URL("https://booking-com15.p.rapidapi.com/api/v1/hotels/searchDestination");
   destUrl.searchParams.set("query", q.ciudad);
   const destRes = await fetch(destUrl, {
     headers: { "x-rapidapi-key": key, "x-rapidapi-host": "booking-com15.p.rapidapi.com" },
   });
-  if (!destRes.ok) throw new Error(`Booking dest ${destRes.status}`);
+  if (!destRes.ok) {
+    const t = await destRes.text();
+    console.error("[search] dest error", destRes.status, t);
+    throw new Error(`Booking dest ${destRes.status}: ${t.slice(0, 200)}`);
+  }
   const destJson = await destRes.json();
+  console.log("[search] dest result:", JSON.stringify(destJson?.data?.[0] ?? null));
   const dest = destJson?.data?.[0];
   if (!dest) return [];
 
@@ -42,9 +48,14 @@ async function searchBooking(key: string, q: SearchInput) {
   const res = await fetch(url, {
     headers: { "x-rapidapi-key": key, "x-rapidapi-host": "booking-com15.p.rapidapi.com" },
   });
-  if (!res.ok) throw new Error(`Booking search ${res.status}`);
+  if (!res.ok) {
+    const t = await res.text();
+    console.error("[search] hotels error", res.status, t);
+    throw new Error(`Booking search ${res.status}: ${t.slice(0, 200)}`);
+  }
   const json = await res.json();
   const hotels = json?.data?.hotels ?? [];
+  console.log(`[search] hotels found: ${hotels.length}`);
 
   const nights = Math.max(
     1,
@@ -81,6 +92,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const key = Deno.env.get("RAPIDAPI_KEY");
+    console.log("[search] RAPIDAPI_KEY present:", !!key);
     if (!key) {
       return new Response(JSON.stringify({ error: "RAPIDAPI_KEY no configurada" }), {
         status: 500,
