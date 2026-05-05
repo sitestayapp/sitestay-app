@@ -27,27 +27,16 @@ FACTURA CORPORATIVA:
 
 BÚSQUEDA:
 - Cuando tengas ciudad y fechas, llama a la herramienta buscar_alojamientos.
-- Presenta entre 3 y 5 opciones reales en el formato indicado.
+- IMPORTANTE: Las opciones se MUESTRAN AUTOMÁTICAMENTE como tarjetas visuales en el chat. NO las enumeres tú en texto.
+- Tras la búsqueda, escribe solo una frase corta del estilo: "He encontrado N opciones para [ciudad] del [fechas]. Pulsa 'Elegir esta opción' en la que prefieras."
 - No inventes precios ni alojamientos: usa solo los devueltos por la herramienta.
 - Si la herramienta devuelve un campo "error", muéstralo literalmente al usuario (no digas "sin disponibilidad"). Ejemplo: "Error en la búsqueda: <texto>".
 - Solo di "no hay resultados" si la herramienta devuelve "results": [] explícitamente vacío.
 
-FORMATO DE OPCIONES:
-Opción 1 — [nombre]
-- Precio: X€/noche (total X€)
-- Valoración: X/10
-- Cancelación: gratuita/no reembolsable
-- Enlace: URL
-- Factura corporativa: sí
-
 CONFIRMACIÓN:
-- Pide confirmación con número de opción.
-- Tras confirmar, solicita NOMBRE y CONTACTO del trabajador (email o WhatsApp).
+- Cuando el usuario diga "Elijo opción N: [nombre]" (lo enviará al pulsar el botón), confirma brevemente y solicita NOMBRE y EMAIL del trabajador.
 - Cuando tengas opción confirmada + datos del trabajador, llama a la herramienta crear_reserva.
-- Confirma a continuación: "Reserva guardada. Se solicitará factura corporativa."
-
-ENVÍO AL TRABAJADOR:
-- Tras crear la reserva, genera un mensaje listo para copiar (WhatsApp/email) con: alojamiento, ciudad, fechas, dirección/enlace y nota de que la factura corporativa va incluida.`;
+- Confirma a continuación: "Reserva guardada y email enviado al trabajador. Factura corporativa solicitada."`;
 
 const TOOLS = [
   {
