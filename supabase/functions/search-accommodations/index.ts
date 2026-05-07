@@ -103,6 +103,74 @@ async function searchBooking(key: string, q: SearchInput) {
     : items;
 }
 
+async function searchAirbnb(key: string, q: SearchInput) {
+  const adults = q.adultos ?? 1;
+  console.log("[airbnb] input:", JSON.stringify(q));
+  const locUrl = new URL("https://airbnb19.p.rapidapi.com/api/v2/searchLocation");
+  locUrl.searchParams.set("query", q.ciudad);
+  const locRes = await fetch(locUrl, {
+    headers: { "x-rapidapi-key": key, "x-rapidapi-host": "airbnb19.p.rapidapi.com" },
+  });
+  if (!locRes.ok) throw new Error(`Airbnb loc ${locRes.status}: ${(await locRes.text()).slice(0, 200)}`);
+  const locJson = await locRes.json();
+  console.log("[airbnb] loc sample:", JSON.stringify(locJson).slice(0, 400));
+  const first = locJson?.data?.[0] ?? locJson?.results?.[0] ?? locJson?.[0];
+  const placeId = first?.placeId ?? first?.place_id ?? first?.id;
+  if (!placeId) throw new Error(`Airbnb sin placeId para "${q.ciudad}"`);
+
+  const url = new URL("https://airbnb19.p.rapidapi.com/api/v2/searchPropertyByPlace");
+  url.searchParams.set("placeId", String(placeId));
+  url.searchParams.set("adults", String(adults));
+  url.searchParams.set("checkin", q.check_in);
+  url.searchParams.set("checkout", q.check_out);
+  url.searchParams.set("currency", "EUR");
+
+  const res = await fetch(url, {
+    headers: { "x-rapidapi-key": key, "x-rapidapi-host": "airbnb19.p.rapidapi.com" },
+  });
+  if (!res.ok) throw new Error(`Airbnb search ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const json = await res.json();
+  const list = json?.data?.list ?? json?.data ?? json?.results ?? [];
+  console.log(`[airbnb] found: ${Array.isArray(list) ? list.length : 0}`);
+
+  const nights = Math.max(1, Math.round((new Date(q.check_out).getTime() - new Date(q.check_in).getTime()) / 86400000));
+
+  const items = (Array.isArray(list) ? list : []).slice(0, 12).map((p: any) => {
+    const listing = p?.listing ?? p;
+    const pricing = p?.pricingQuote ?? p?.pricing ?? {};
+    const totalRaw = pricing?.structuredStayDisplayPrice?.primaryLine?.price
+      ?? pricing?.price?.total?.amount
+      ?? pricing?.rate?.amount
+      ?? null;
+    const total = typeof totalRaw === "string" ? Number(totalRaw.replace(/[^0-9.]/g, "")) : totalRaw;
+    const perNight = total ? +(total / nights).toFixed(2) : null;
+    const id = listing?.id ?? p?.id;
+    const photos: string[] = (listing?.contextualPictures ?? listing?.pictures ?? [])
+      .map((x: any) => x?.picture ?? x?.url ?? x).filter(Boolean);
+    return {
+      provider: "airbnb",
+      id: String(id ?? crypto.randomUUID()),
+      name: listing?.name ?? listing?.title ?? "Airbnb",
+      price_per_night: perNight,
+      price_total: total ? +Number(total).toFixed(2) : null,
+      currency: "EUR",
+      rating: listing?.avgRating ? Number(listing.avgRating) * 2 : (listing?.starRating ?? null),
+      reviews: listing?.reviewsCount ?? null,
+      address: listing?.localizedCityName ?? listing?.city ?? q.ciudad,
+      checkin: q.check_in,
+      checkout: q.check_out,
+      cancelacion_gratis: false,
+      photos,
+      url: id ? `https://www.airbnb.com/rooms/${id}` : null,
+      tipo: q.tipo ?? "apartamento",
+    };
+  });
+
+  return q.max_precio
+    ? items.filter((i: any) => !i.price_per_night || i.price_per_night <= q.max_precio!)
+    : items;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -120,7 +188,26 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const results = await searchBooking(key, input);
+    const [bookingRes, airbnbRes] = await Promise.allSettled([
+      searchBooking(key, input),
+      searchAirbnb(key, input),
+    ]);
+    let results: any[] = [];
+    if (bookingRes.status === "fulfilled") results = results.concat(bookingRes.value);
+    else console.error("[search] booking failed:", bookingRes.reason);
+    if (airbnbRes.status === "fulfilled") results = results.concat(airbnbRes.value);
+    else console.warn("[search] airbnb failed (silenciado):", airbnbRes.reason);
+
+    if (results.length === 0 && bookingRes.status === "rejected") {
+      throw bookingRes.reason;
+    }
+
+    results.sort((a, b) => {
+      const pa = a.price_per_night ?? Number.MAX_SAFE_INTEGER;
+      const pb = b.price_per_night ?? Number.MAX_SAFE_INTEGER;
+      return pa - pb;
+    });
+
     return new Response(JSON.stringify({ results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
