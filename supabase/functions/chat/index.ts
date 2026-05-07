@@ -36,6 +36,7 @@ BÚSQUEDA:
 CONFIRMACIÓN:
 - Cuando el usuario diga "Elijo opción N: [nombre]" (lo enviará al pulsar el botón), confirma brevemente y solicita NOMBRE y EMAIL del trabajador.
 - Cuando tengas opción confirmada + datos del trabajador, llama a la herramienta crear_reserva.
+- Al llamar crear_reserva, incluye también address, photo (primera URL de fotos) y url de la opción elegida si los tienes.
 - Confirma a continuación: "Reserva guardada y email enviado al trabajador. Factura corporativa solicitada."`;
 
 const TOOLS = [
@@ -68,6 +69,9 @@ const TOOLS = [
         fecha_fin: { type: "string", description: "YYYY-MM-DD" },
         trabajador_nombre: { type: "string" },
         trabajador_contacto: { type: "string" },
+        address: { type: "string", description: "Dirección del alojamiento" },
+        photo: { type: "string", description: "URL de la foto del alojamiento" },
+        url: { type: "string", description: "URL de la reserva en Booking" },
       },
       required: ["ciudad", "alojamiento", "fecha_inicio", "fecha_fin", "trabajador_nombre", "trabajador_contacto"],
     },
@@ -111,24 +115,23 @@ async function runTool(name: string, input: any, ctx: { userId: string | null; a
 
     // Fire-and-forget email to worker via send-transactional-email
     try {
-      const emailRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-transactional-email`, {
+      const emailRes = await fetch(`${Deno.env.get("SUPABASE_URL")}/functions/v1/send-booking-email`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")}`,
         },
         body: JSON.stringify({
-          templateName: "booking-confirmation",
-          recipientEmail: input.trabajador_contacto,
-          idempotencyKey: `booking-${data.id}`,
-          templateData: {
-            name: input.trabajador_nombre,
-            ciudad: input.ciudad,
-            alojamiento: input.alojamiento,
-            fecha_inicio: input.fecha_inicio,
-            fecha_fin: input.fecha_fin,
-            precio: input.precio,
-          },
+          trabajador_nombre: input.trabajador_nombre,
+          trabajador_contacto: input.trabajador_contacto,
+          ciudad: input.ciudad,
+          alojamiento: input.alojamiento,
+          fecha_inicio: input.fecha_inicio,
+          fecha_fin: input.fecha_fin,
+          precio: input.precio,
+          address: input.address,
+          photo: input.photo,
+          url: input.url,
         }),
       });
       console.log("[chat] email send status:", emailRes.status);
