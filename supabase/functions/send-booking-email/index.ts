@@ -5,7 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FROM = "SiteStayApp <onboarding@resend.dev>";
+const PRIMARY_FROM = "SiteStayApp <reservas@sitestayapp.com>";
+const FALLBACK_FROM = "SiteStayApp <onboarding@resend.dev>";
 
 function fmtDate(s: string) {
   try {
@@ -86,16 +87,26 @@ serve(async (req) => {
     const subject = `Tu alojamiento en ${ciudad} — ${fmtDate(fecha_inicio)} al ${fmtDate(fecha_fin)}`;
     const html = buildHtml({ trabajador_nombre, ciudad, alojamiento, fecha_inicio, fecha_fin, precio, address, photo, url });
 
-    const res = await fetch("https://api.resend.com/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${RESEND_API_KEY}`,
-      },
-      body: JSON.stringify({ from: FROM, to: [trabajador_contacto], subject, html }),
-    });
-    const data = await res.json();
-    console.log("[send-booking-email] resend status", res.status, data);
+    async function send(from: string) {
+      const r = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${RESEND_API_KEY}` },
+        body: JSON.stringify({ from, to: [trabajador_contacto], subject, html }),
+      });
+      return { r, data: await r.json() };
+    }
+
+    let { r: res, data } = await send(PRIMARY_FROM);
+    console.log("[send-booking-email] primary status", res.status, data);
+    if (!res.ok) {
+      const msg = (data?.message || "").toString().toLowerCase();
+      const domainIssue = res.status === 403 || msg.includes("domain") || msg.includes("verify") || msg.includes("not verified");
+      if (domainIssue) {
+        console.warn("[send-booking-email] primary failed, falling back to onboarding@resend.dev");
+        ({ r: res, data } = await send(FALLBACK_FROM));
+        console.log("[send-booking-email] fallback status", res.status, data);
+      }
+    }
     if (!res.ok) {
       return new Response(JSON.stringify({ error: data?.message || "Resend error", details: data }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
