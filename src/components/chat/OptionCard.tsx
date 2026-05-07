@@ -3,6 +3,7 @@ import { Star, MapPin, ExternalLink } from "lucide-react";
 
 export type AccommodationOption = {
   id?: string;
+  provider?: "booking" | "airbnb" | string;
   name: string;
   price_per_night?: number | null;
   price_total?: number | null;
@@ -58,8 +59,13 @@ export default function OptionCard({
         ) : (
           <div className="h-full w-full flex items-center justify-center text-muted-foreground text-xs">Sin foto</div>
         )}
-        <span className="absolute top-2 left-2 text-[10px] font-semibold tracking-wider bg-foreground/80 text-background px-2 py-0.5 rounded-full">
-          AUTO · BOOKING
+        <span
+          className={
+            "absolute top-2 left-2 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full text-white " +
+            (option.provider === "airbnb" ? "bg-red-600" : "bg-blue-600")
+          }
+        >
+          {(option.provider ?? "booking").toUpperCase()}
         </span>
       </div>
 
