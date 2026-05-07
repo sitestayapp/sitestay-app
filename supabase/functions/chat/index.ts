@@ -36,6 +36,7 @@ BÚSQUEDA:
 CONFIRMACIÓN:
 - Cuando el usuario diga "Elijo opción N: [nombre]" (lo enviará al pulsar el botón), confirma brevemente y solicita NOMBRE y EMAIL del trabajador.
 - Cuando tengas opción confirmada + datos del trabajador, llama a la herramienta crear_reserva.
+- Al llamar crear_reserva, incluye también address, photo (primera URL de fotos) y url de la opción elegida si los tienes.
 - Confirma a continuación: "Reserva guardada y email enviado al trabajador. Factura corporativa solicitada."`;
 
 const TOOLS = [
