@@ -58,8 +58,15 @@ async function searchBooking(key: string, q: SearchInput) {
   const hotels = json?.data?.hotels ?? json?.result?.hotels ?? json?.result ?? [];
   console.log(`[search] hotels found: ${hotels.length} | url: ${url.toString()}`);
   if (hotels.length === 0) {
-    console.log("[search] empty response sample:", JSON.stringify(json).slice(0, 500));
-    if (json?.message) throw new Error(`Booking: ${Array.isArray(json.message) ? json.message.join("; ") : json.message}`);
+    console.log("[search] empty response sample:", JSON.stringify(json).slice(0, 800));
+    const m = json?.message;
+    if (m) {
+      let msg: string;
+      if (Array.isArray(m)) msg = m.map((x) => (typeof x === "string" ? x : (x?.message ?? JSON.stringify(x)))).join("; ");
+      else if (typeof m === "object") msg = m?.message ?? JSON.stringify(m);
+      else msg = String(m);
+      throw new Error(`Booking: ${msg}`);
+    }
   }
 
   const nights = Math.max(
