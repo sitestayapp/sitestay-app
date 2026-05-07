@@ -8,51 +8,53 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* SiteStayApp palette: warm cream bg #F5F2EB, corporate green #2D6A4F, ink #0A0A0A */
-    --background: 42 27% 94%;
-    --foreground: 0 0% 4%;
+    /* SiteStayApp palette
+       primary navy #1B3A6B · accent blue #2E86DE · bg #F8F9FA
+       ink #0D1117 · secondary #E8EDF5 */
+    --background: 210 17% 98%;
+    --foreground: 213 28% 7%;
 
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 4%;
+    --card-foreground: 213 28% 7%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 4%;
+    --popover-foreground: 213 28% 7%;
 
-    --primary: 152 41% 30%;
-    --primary-foreground: 42 27% 96%;
-    --primary-glow: 152 41% 42%;
+    --primary: 215 60% 26%;
+    --primary-foreground: 210 17% 98%;
+    --primary-glow: 210 73% 53%;
 
-    --secondary: 42 22% 88%;
-    --secondary-foreground: 0 0% 4%;
+    --secondary: 218 35% 93%;
+    --secondary-foreground: 215 60% 26%;
 
-    --muted: 42 18% 90%;
-    --muted-foreground: 0 0% 35%;
+    --muted: 218 30% 95%;
+    --muted-foreground: 215 14% 38%;
 
-    --accent: 152 30% 92%;
-    --accent-foreground: 152 41% 22%;
+    --accent: 210 73% 53%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 70% 45%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 42 18% 84%;
-    --input: 42 18% 84%;
-    --ring: 152 41% 30%;
+    --border: 218 28% 88%;
+    --input: 218 28% 88%;
+    --ring: 210 73% 53%;
 
     --radius: 0.75rem;
 
-    --gradient-hero: linear-gradient(135deg, hsl(152 41% 22%), hsl(152 41% 38%));
-    --gradient-soft: linear-gradient(180deg, hsl(42 27% 96%), hsl(42 22% 90%));
-    --shadow-elegant: 0 20px 50px -20px hsl(152 41% 22% / 0.25);
-    --shadow-soft: 0 4px 20px -8px hsl(0 0% 4% / 0.08);
+    --gradient-hero: linear-gradient(135deg, hsl(215 60% 22%), hsl(210 73% 53%));
+    --gradient-soft: linear-gradient(180deg, hsl(210 17% 99%), hsl(218 35% 95%));
+    --shadow-elegant: 0 20px 50px -20px hsl(215 60% 26% / 0.25);
+    --shadow-soft: 0 4px 20px -8px hsl(215 60% 26% / 0.10);
 
-    --sidebar-background: 42 25% 96%;
-    --sidebar-foreground: 0 0% 12%;
-    --sidebar-primary: 152 41% 30%;
-    --sidebar-primary-foreground: 42 27% 96%;
-    --sidebar-accent: 42 22% 90%;
-    --sidebar-accent-foreground: 152 41% 22%;
-    --sidebar-border: 42 18% 84%;
-    --sidebar-ring: 152 41% 30%;
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 213 28% 12%;
+    --sidebar-primary: 215 60% 26%;
+    --sidebar-primary-foreground: 210 17% 98%;
+    --sidebar-accent: 218 35% 93%;
+    --sidebar-accent-foreground: 215 60% 26%;
+    --sidebar-border: 218 28% 90%;
+    --sidebar-ring: 210 73% 53%;
   }
 
   .dark {

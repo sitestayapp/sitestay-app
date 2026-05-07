@@ -1,14 +1,15 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Sparkles, Building2, Receipt, MessageSquare } from "lucide-react";
+import { Logo } from "@/components/Logo";
 
 const Landing = () => {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b border-border/60">
         <div className="container flex h-16 items-center justify-between">
-          <Link to="/" className="font-display text-xl font-bold tracking-tight">
-            SiteStay<span className="text-primary">App</span>
+          <Link to="/" className="tracking-tight">
+            <Logo />
           </Link>
           <nav className="flex items-center gap-2">
             <Button variant="ghost" asChild><Link to="/login">Entrar</Link></Button>
