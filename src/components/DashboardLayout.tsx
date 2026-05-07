@@ -4,6 +4,7 @@ import { MessageSquare, CalendarRange, Settings, LogOut, Plus, LayoutDashboard, 
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Logo, LogoMark } from "@/components/Logo";
 
 type Conv = { id: string; title: string };
 
@@ -37,13 +38,11 @@ export default function DashboardLayout() {
     <div className="min-h-screen flex w-full bg-background">
       <aside className="w-64 shrink-0 border-r border-border bg-sidebar flex flex-col">
         <div className="p-5 border-b border-sidebar-border">
-          <Link to="/dashboard" className="font-display text-xl font-bold">
-            SiteStay<span className="text-primary">App</span>
+          <Link to="/dashboard" className="block">
+            <Logo />
           </Link>
           <div className="flex items-center gap-2 mt-3">
-            <div className="h-9 w-9 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-display font-bold text-sm shrink-0">
-              {(empresa || user?.email || "?").slice(0, 1).toUpperCase()}
-            </div>
+            <LogoMark className="h-9 w-9 rounded-full bg-secondary text-primary text-sm shrink-0" />
             <div className="min-w-0">
               <div className="text-sm font-semibold truncate">{empresa || "Tu empresa"}</div>
               <div className="text-[11px] text-muted-foreground truncate">{user?.email}</div>
