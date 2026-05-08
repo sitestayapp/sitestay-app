@@ -8,17 +8,21 @@ import { Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
 import OptionCard, { AccommodationOption } from "@/components/chat/OptionCard";
+import CarCard, { CarOption } from "@/components/chat/CarCard";
+import FlightCard, { FlightOption } from "@/components/chat/FlightCard";
 
-type Msg = { id?: string; role: "user" | "assistant"; content: string; options?: AccommodationOption[] };
+type Kind = "accommodation" | "car" | "flight";
+type Msg = { id?: string; role: "user" | "assistant"; content: string; options?: any[]; kind?: Kind };
 
 const OPTIONS_MARKER_RE = /\n*<!--OPTIONS:(.*?)-->\n*/s;
 
-function parseStored(content: string): { text: string; options?: AccommodationOption[] } {
+function parseStored(content: string): { text: string; options?: any[]; kind?: Kind } {
   const m = content.match(OPTIONS_MARKER_RE);
   if (!m) return { text: content };
   try {
-    const opts = JSON.parse(m[1]);
-    return { text: content.replace(OPTIONS_MARKER_RE, "").trim(), options: opts };
+    const parsed = JSON.parse(m[1]);
+    if (Array.isArray(parsed)) return { text: content.replace(OPTIONS_MARKER_RE, "").trim(), options: parsed, kind: "accommodation" };
+    return { text: content.replace(OPTIONS_MARKER_RE, "").trim(), options: parsed.options, kind: parsed.kind };
   } catch {
     return { text: content };
   }
@@ -52,7 +56,7 @@ export default function Chat() {
           setMessages(
             data.map((d: any) => {
               const parsed = parseStored(d.content ?? "");
-              return { id: d.id, role: d.role, content: parsed.text, options: parsed.options };
+              return { id: d.id, role: d.role, content: parsed.text, options: parsed.options, kind: parsed.kind };
             }),
           );
         }
@@ -80,7 +84,7 @@ export default function Chat() {
     }
 
     const userMsg: Msg = { role: "user", content: text };
-    setMessages((m) => [...m, userMsg, { role: "assistant", content: "", options: undefined }]);
+    setMessages((m) => [...m, userMsg, { role: "assistant", content: "", options: undefined, kind: undefined }]);
     setInput("");
 
     await supabase.from("messages").insert({ conversation_id: cid, user_id: user.id, role: "user", content: text });
@@ -110,7 +114,8 @@ export default function Chat() {
       const decoder = new TextDecoder();
       let buf = "";
       let assistantText = "";
-      let assistantOptions: AccommodationOption[] | undefined;
+      let assistantOptions: any[] | undefined;
+      let assistantKind: Kind | undefined;
       let done = false;
       while (!done) {
         const { done: d, value } = await reader.read();
@@ -130,15 +135,16 @@ export default function Chat() {
               assistantText += evt.delta;
               setMessages((m) => {
                 const copy = [...m];
-                copy[copy.length - 1] = { role: "assistant", content: assistantText, options: assistantOptions };
+                copy[copy.length - 1] = { role: "assistant", content: assistantText, options: assistantOptions, kind: assistantKind };
                 return copy;
               });
             }
             if (evt.options) {
               assistantOptions = evt.options;
+              if (evt.kind) assistantKind = evt.kind;
               setMessages((m) => {
                 const copy = [...m];
-                copy[copy.length - 1] = { role: "assistant", content: assistantText, options: assistantOptions };
+                copy[copy.length - 1] = { role: "assistant", content: assistantText, options: assistantOptions, kind: assistantKind };
                 return copy;
               });
             }
@@ -148,7 +154,7 @@ export default function Chat() {
 
       if (assistantText) {
         const stored = assistantOptions
-          ? `${assistantText}\n\n<!--OPTIONS:${JSON.stringify(assistantOptions)}-->`
+          ? `${assistantText}\n\n<!--OPTIONS:${JSON.stringify({ options: assistantOptions, kind: assistantKind ?? "accommodation" })}-->`
           : assistantText;
         await supabase.from("messages").insert({
           conversation_id: cid, user_id: user.id, role: "assistant", content: stored,
@@ -163,10 +169,18 @@ export default function Chat() {
     }
   };
 
-  const chooseOption = (opt: AccommodationOption, index: number) => {
+  const chooseAccommodation = (opt: AccommodationOption, index: number) => {
     const total = opt.price_total ? ` (total ${Math.round(opt.price_total)}€)` : "";
     const pn = opt.price_per_night ? ` a ${Math.round(opt.price_per_night)}€/noche${total}` : "";
     send(`Elijo opción ${index + 1}: ${opt.name}${pn}. Procede a reservar.`);
+  };
+  const chooseCar = (opt: CarOption, index: number) => {
+    const total = opt.price_total ? ` (total ${Math.round(opt.price_total)}€)` : "";
+    send(`Elijo coche ${index + 1}: ${opt.model}${opt.company ? ` de ${opt.company}` : ""}${total}. Procede.`);
+  };
+  const chooseFlight = (opt: FlightOption, index: number) => {
+    const price = opt.price_label ?? (opt.price_total ? `${Math.round(opt.price_total)}€` : "");
+    send(`Elijo vuelo ${index + 1}: ${opt.airline} ${opt.origin}→${opt.destination} ${opt.depart_time}${price ? ` (${price})` : ""}. Procede.`);
   };
 
   const isEmpty = messages.length === 0;
@@ -219,15 +233,12 @@ export default function Chat() {
               </div>
               {m.options && m.options.length > 0 && (
                 <div className="w-full max-w-[95%] grid gap-3">
-                  {m.options.map((opt, idx) => (
-                    <OptionCard
-                      key={opt.id ?? idx}
-                      option={opt}
-                      index={idx}
-                      onChoose={chooseOption}
-                      disabled={loading}
-                    />
-                  ))}
+                  {m.options.map((opt: any, idx: number) => {
+                    const k = m.kind ?? "accommodation";
+                    if (k === "car") return <CarCard key={opt.id ?? idx} option={opt} index={idx} onChoose={chooseCar} disabled={loading} />;
+                    if (k === "flight") return <FlightCard key={opt.id ?? idx} option={opt} index={idx} onChoose={chooseFlight} disabled={loading} />;
+                    return <OptionCard key={opt.id ?? idx} option={opt} index={idx} onChoose={chooseAccommodation} disabled={loading} />;
+                  })}
                 </div>
               )}
             </div>
