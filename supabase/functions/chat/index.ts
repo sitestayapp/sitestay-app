@@ -10,7 +10,7 @@ const corsHeaders = {
 const SYSTEM_PROMPT = `Eres NomadDesk, un agente especializado en reservas de alojamiento corporativo para empresas con equipos móviles.
 
 COMPORTAMIENTO:
-- Extrae: ciudad, personas, fechas, presupuesto, requisitos.
+- Extrae: ciudad, personas, fechas, presupuesto, requisitos. También detecta si menciona "coche", "vehículo", "carro", "transporte", "vuelo" o "avión".
 - Si falta info crítica, pregunta solo lo imprescindible.
 - Responde en el idioma del admin.
 
@@ -25,18 +25,21 @@ FACTURA CORPORATIVA:
 - Solicitar siempre en todas las reservas automáticamente.
 - Indicarlo en la confirmación y en el mensaje al trabajador.
 
-BÚSQUEDA:
-- Cuando tengas ciudad y fechas, llama a la herramienta buscar_alojamientos.
-- IMPORTANTE: Las opciones se MUESTRAN AUTOMÁTICAMENTE como tarjetas visuales en el chat. NO las enumeres tú en texto.
-- Tras la búsqueda, escribe solo una frase corta del estilo: "He encontrado N opciones para [ciudad] del [fechas]. Pulsa 'Elegir esta opción' en la que prefieras."
+BÚSQUEDA - ALOJAMIENTO / COCHE / VUELO:
+- Para alojamiento: llama a buscar_alojamientos con ciudad y fechas.
+- Para coche: si menciona "coche", "vehículo", "carro" o "transporte", llama a buscar_coches con ciudad y fechas de recogida/devolución.
+- Para vuelo: si menciona "vuelo" o "avión", llama a buscar_vuelos con origen, destino y fecha (y fecha_vuelta si aplica).
+- Puedes llamar varias herramientas si el admin pide alojamiento + coche + vuelo en el mismo viaje.
+- IMPORTANTE: Los resultados se MUESTRAN AUTOMÁTICAMENTE como tarjetas visuales. NO los enumeres tú en texto.
+- Tras cada búsqueda, escribe solo una frase corta del estilo: "He encontrado N opciones de [tipo] para [ciudad/ruta]. Pulsa 'Elegir' en la que prefieras."
 - No inventes precios ni alojamientos: usa solo los devueltos por la herramienta.
 - Si la herramienta devuelve un campo "error", muéstralo literalmente al usuario (no digas "sin disponibilidad"). Ejemplo: "Error en la búsqueda: <texto>".
 - Solo di "no hay resultados" si la herramienta devuelve "results": [] explícitamente vacío.
 
 CONFIRMACIÓN:
-- Cuando el usuario diga "Elijo opción N: [nombre]" (lo enviará al pulsar el botón), confirma brevemente y solicita NOMBRE y EMAIL del trabajador.
+- Cuando el usuario diga "Elijo opción/coche/vuelo: [nombre]" (lo enviará al pulsar el botón), confirma brevemente y solicita NOMBRE y EMAIL del trabajador (solo si aún no los tienes).
 - Cuando tengas opción confirmada + datos del trabajador, llama a la herramienta crear_reserva.
-- Al llamar crear_reserva, incluye también address, photo (primera URL de fotos) y url de la opción elegida si los tienes.
+- Al llamar crear_reserva, incluye también address, photo (primera URL de fotos) y url. Si el viaje incluye coche o vuelo, inclúyelos en los campos coche y vuelo.
 - Confirma a continuación: "Reserva guardada y email enviado al trabajador. Factura corporativa solicitada."`;
 
 const TOOLS = [
@@ -57,6 +60,36 @@ const TOOLS = [
     },
   },
   {
+    name: "buscar_coches",
+    description: "Busca coches de alquiler en Booking Cars para una ciudad y fechas.",
+    input_schema: {
+      type: "object",
+      properties: {
+        ciudad: { type: "string" },
+        pick_up_date: { type: "string", description: "YYYY-MM-DD" },
+        drop_off_date: { type: "string", description: "YYYY-MM-DD" },
+        pick_up_time: { type: "string", description: "HH:MM (24h), por defecto 10:00" },
+        drop_off_time: { type: "string", description: "HH:MM (24h), por defecto 10:00" },
+      },
+      required: ["ciudad", "pick_up_date", "drop_off_date"],
+    },
+  },
+  {
+    name: "buscar_vuelos",
+    description: "Busca vuelos en Sky Scrapper. Soporta solo ida o ida y vuelta.",
+    input_schema: {
+      type: "object",
+      properties: {
+        origen: { type: "string", description: "Ciudad o aeropuerto de origen" },
+        destino: { type: "string", description: "Ciudad o aeropuerto de destino" },
+        fecha_salida: { type: "string", description: "YYYY-MM-DD" },
+        fecha_vuelta: { type: "string", description: "YYYY-MM-DD (opcional)" },
+        adultos: { type: "number" },
+      },
+      required: ["origen", "destino", "fecha_salida"],
+    },
+  },
+  {
     name: "crear_reserva",
     description: "Crea una reserva en la base de datos del usuario tras la confirmación. La factura corporativa se solicita siempre.",
     input_schema: {
@@ -72,6 +105,8 @@ const TOOLS = [
         address: { type: "string", description: "Dirección del alojamiento" },
         photo: { type: "string", description: "URL de la foto del alojamiento" },
         url: { type: "string", description: "URL de la reserva en Booking" },
+        coche: { type: "object", description: "Datos del coche elegido (modelo, empresa, precio_total, pick_up_date, drop_off_date)" },
+        vuelo: { type: "object", description: "Datos del vuelo elegido (airline, origin, destination, depart_time, arrive_time, price_total, date, return_date)" },
       },
       required: ["ciudad", "alojamiento", "fecha_inicio", "fecha_fin", "trabajador_nombre", "trabajador_contacto"],
     },
@@ -79,8 +114,8 @@ const TOOLS = [
 ];
 
 async function runTool(name: string, input: any, ctx: { userId: string | null; authHeader: string | null }) {
-  if (name === "buscar_alojamientos") {
-    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/search-accommodations`;
+  const callSearch = async (fnName: string, kind: string) => {
+    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/${fnName}`;
     const res = await fetch(url, {
       method: "POST",
       headers: {
@@ -90,9 +125,12 @@ async function runTool(name: string, input: any, ctx: { userId: string | null; a
       body: JSON.stringify(input),
     });
     const json = await res.json();
-    console.log("[chat] buscar_alojamientos status:", res.status, "count:", Array.isArray(json?.results) ? json.results.length : "n/a", "error:", json?.error ?? null);
-    return { text: JSON.stringify(json).slice(0, 12000), options: Array.isArray(json?.results) ? json.results.slice(0, 5) : [] };
-  }
+    console.log(`[chat] ${fnName} status:`, res.status, "count:", Array.isArray(json?.results) ? json.results.length : "n/a", "error:", json?.error ?? null);
+    return { text: JSON.stringify(json).slice(0, 12000), options: Array.isArray(json?.results) ? json.results.slice(0, 5) : [], kind };
+  };
+  if (name === "buscar_alojamientos") return await callSearch("search-accommodations", "accommodation");
+  if (name === "buscar_coches") return await callSearch("search-cars", "car");
+  if (name === "buscar_vuelos") return await callSearch("search-flights", "flight");
   if (name === "crear_reserva") {
     if (!ctx.userId) return { text: JSON.stringify({ error: "Usuario no autenticado" }) };
     const supa = createClient(
@@ -132,6 +170,8 @@ async function runTool(name: string, input: any, ctx: { userId: string | null; a
           address: input.address,
           photo: input.photo,
           url: input.url,
+          coche: input.coche,
+          vuelo: input.vuelo,
         }),
       });
       console.log("[chat] email send status:", emailRes.status);
@@ -222,7 +262,7 @@ serve(async (req) => {
             for (const tu of toolUses) {
               const result: any = await runTool(tu.name, tu.input, { userId, authHeader });
               if (result?.options && Array.isArray(result.options) && result.options.length) {
-                sendEvent({ options: result.options });
+                sendEvent({ options: result.options, kind: result.kind ?? "accommodation" });
               }
               toolResults.push({
                 type: "tool_result",
