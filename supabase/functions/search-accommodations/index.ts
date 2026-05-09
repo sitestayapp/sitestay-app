@@ -171,6 +171,139 @@ async function searchAirbnb(key: string, q: SearchInput) {
     : items;
 }
 
+// ---------- FALLBACK 1: booking-com.p.rapidapi.com (Tipsters) ----------
+async function searchBookingTipsters(key: string, q: SearchInput) {
+  const adults = q.adultos ?? 1;
+  console.log("[fallback1/booking-tipsters] input:", JSON.stringify(q));
+  const HOST_T = "booking-com.p.rapidapi.com";
+  // Resolve dest_id via locations endpoint
+  const locUrl = new URL(`https://${HOST_T}/v1/hotels/locations`);
+  locUrl.searchParams.set("name", q.ciudad);
+  locUrl.searchParams.set("locale", "es");
+  const locRes = await fetch(locUrl, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_T } });
+  if (!locRes.ok) throw new Error(`Tipsters loc ${locRes.status}`);
+  const locJson = await locRes.json();
+  const loc = (Array.isArray(locJson) ? locJson : locJson?.data ?? [])[0];
+  if (!loc) throw new Error(`Tipsters sin destino para "${q.ciudad}"`);
+  const destId = loc?.dest_id ?? loc?.id;
+  const destType = loc?.dest_type ?? "city";
+
+  const url = new URL(`https://${HOST_T}/v1/hotels/search`);
+  url.searchParams.set("dest_id", String(destId));
+  url.searchParams.set("dest_type", String(destType));
+  url.searchParams.set("checkin_date", q.check_in);
+  url.searchParams.set("checkout_date", q.check_out);
+  url.searchParams.set("adults_number", String(adults));
+  url.searchParams.set("room_number", "1");
+  url.searchParams.set("order_by", "price");
+  url.searchParams.set("filter_by_currency", "EUR");
+  url.searchParams.set("locale", "es");
+  url.searchParams.set("units", "metric");
+  url.searchParams.set("page_number", "0");
+  const res = await fetch(url, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_T } });
+  if (!res.ok) throw new Error(`Tipsters search ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const json = await res.json();
+  const hotels = json?.result ?? json?.results ?? json?.data ?? [];
+  console.log(`[fallback1/booking-tipsters] found: ${hotels.length}`);
+  const nights = Math.max(1, Math.round((new Date(q.check_out).getTime() - new Date(q.check_in).getTime()) / 86400000));
+  return (Array.isArray(hotels) ? hotels : []).slice(0, 12).map((h: any) => {
+    const total = h?.min_total_price ?? h?.price_breakdown?.gross_price ?? null;
+    const perNight = total ? +(Number(total) / nights).toFixed(2) : null;
+    return {
+      provider: "booking",
+      id: String(h?.hotel_id ?? crypto.randomUUID()),
+      name: h?.hotel_name ?? "Hotel",
+      price_per_night: perNight,
+      price_total: total ? +Number(total).toFixed(2) : null,
+      currency: h?.currencycode ?? "EUR",
+      rating: h?.review_score ?? null,
+      reviews: h?.review_nr ?? null,
+      address: h?.address ?? q.ciudad,
+      checkin: q.check_in,
+      checkout: q.check_out,
+      cancelacion_gratis: !!h?.is_free_cancellable,
+      photos: h?.main_photo_url ? [h.main_photo_url] : [],
+      url: h?.url ?? null,
+      tipo: q.tipo ?? "hotel",
+    };
+  });
+}
+
+// ---------- FALLBACK 2: tripadvisor-com1 (Things4u) ----------
+async function searchTripadvisor(key: string, q: SearchInput) {
+  const adults = q.adultos ?? 1;
+  console.log("[fallback2/tripadvisor] input:", JSON.stringify(q));
+  const HOST_TA = "tripadvisor-com1.p.rapidapi.com";
+  const locUrl = new URL(`https://${HOST_TA}/hotels/auto-complete`);
+  locUrl.searchParams.set("query", q.ciudad);
+  const locRes = await fetch(locUrl, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_TA } });
+  if (!locRes.ok) throw new Error(`TA loc ${locRes.status}`);
+  const locJson = await locRes.json();
+  const list = locJson?.data ?? locJson?.results ?? [];
+  const geoId = list?.[0]?.geoId ?? list?.[0]?.geo_id ?? list?.[0]?.id;
+  if (!geoId) throw new Error(`TA sin geoId para "${q.ciudad}"`);
+  const url = new URL(`https://${HOST_TA}/hotels/search`);
+  url.searchParams.set("geoId", String(geoId));
+  url.searchParams.set("checkIn", q.check_in);
+  url.searchParams.set("checkOut", q.check_out);
+  url.searchParams.set("adults", String(adults));
+  url.searchParams.set("rooms", "1");
+  url.searchParams.set("currencyCode", "EUR");
+  const res = await fetch(url, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_TA } });
+  if (!res.ok) throw new Error(`TA search ${res.status}`);
+  const json = await res.json();
+  const hotels = json?.data?.data ?? json?.data ?? json?.results ?? [];
+  console.log(`[fallback2/tripadvisor] found: ${Array.isArray(hotels) ? hotels.length : 0}`);
+  const nights = Math.max(1, Math.round((new Date(q.check_out).getTime() - new Date(q.check_in).getTime()) / 86400000));
+  return (Array.isArray(hotels) ? hotels : []).slice(0, 12).map((h: any) => {
+    const priceRaw = h?.priceForDisplay ?? h?.price?.amount ?? h?.priceDetails ?? null;
+    const total = typeof priceRaw === "string" ? Number(priceRaw.replace(/[^0-9.]/g, "")) : priceRaw;
+    const perNight = total ? +(Number(total) / nights).toFixed(2) : null;
+    const photos = (h?.cardPhotos ?? h?.photos ?? []).map((p: any) => p?.sizes?.urlTemplate?.replace("{width}", "800")?.replace("{height}", "600") ?? p?.url ?? p).filter(Boolean);
+    return {
+      provider: "tripadvisor",
+      id: String(h?.id ?? crypto.randomUUID()),
+      name: h?.title ?? h?.name ?? "Hotel",
+      price_per_night: perNight,
+      price_total: total ? +Number(total).toFixed(2) : null,
+      currency: "EUR",
+      rating: h?.bubbleRating?.rating ?? h?.rating ?? null,
+      reviews: h?.bubbleRating?.count ?? h?.reviewCount ?? null,
+      address: h?.secondaryInfo ?? q.ciudad,
+      checkin: q.check_in,
+      checkout: q.check_out,
+      cancelacion_gratis: false,
+      photos,
+      url: h?.commerceInfo?.externalUrl ?? null,
+      tipo: q.tipo ?? "hotel",
+    };
+  });
+}
+
+async function searchAccommodationWithFallback(key: string, input: SearchInput) {
+  const providers: Array<[string, () => Promise<any[]>]> = [
+    ["booking-com15 (DataCrawler)", () => searchBooking(key, input)],
+    ["booking-com (Tipsters)", () => searchBookingTipsters(key, input)],
+    ["tripadvisor-com1", () => searchTripadvisor(key, input)],
+  ];
+  let lastErr: any = null;
+  for (const [name, fn] of providers) {
+    try {
+      const res = await fn();
+      if (Array.isArray(res) && res.length > 0) {
+        console.log(`[accommodation] ✅ provider responded: ${name} (${res.length} results)`);
+        return res;
+      }
+      console.warn(`[accommodation] ${name} returned 0 results, trying next`);
+    } catch (e) {
+      lastErr = e;
+      console.warn(`[accommodation] ${name} failed:`, e instanceof Error ? e.message : e);
+    }
+  }
+  if (lastErr) throw lastErr;
+  return [];
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -188,18 +321,18 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const [bookingRes, airbnbRes] = await Promise.allSettled([
-      searchBooking(key, input),
+    const [primaryRes, airbnbRes] = await Promise.allSettled([
+      searchAccommodationWithFallback(key, input),
       searchAirbnb(key, input),
     ]);
     let results: any[] = [];
-    if (bookingRes.status === "fulfilled") results = results.concat(bookingRes.value);
-    else console.error("[search] booking failed:", bookingRes.reason);
+    if (primaryRes.status === "fulfilled") results = results.concat(primaryRes.value);
+    else console.error("[search] all primary providers failed:", primaryRes.reason);
     if (airbnbRes.status === "fulfilled") results = results.concat(airbnbRes.value);
     else console.warn("[search] airbnb failed (silenciado):", airbnbRes.reason);
 
-    if (results.length === 0 && bookingRes.status === "rejected") {
-      throw bookingRes.reason;
+    if (results.length === 0) {
+      return new Response(JSON.stringify({ results: [], error: "No hay alojamientos disponibles en este momento. Intenta con otras fechas o ciudad." }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     results.sort((a, b) => {
