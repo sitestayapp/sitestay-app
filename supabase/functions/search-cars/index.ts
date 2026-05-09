@@ -33,6 +33,105 @@ function toHM(s?: string, fallback = "10:00"): string {
   return fallback;
 }
 
+const CITY_FALLBACK_COORDS: Record<string, { lat: number; lng: number; name: string }> = {
+  "madrid": { lat: 40.4168, lng: -3.7038, name: "Madrid" },
+  "barcelona": { lat: 41.3851, lng: 2.1734, name: "Barcelona" },
+  "berlin": { lat: 52.5200, lng: 13.4050, name: "Berlin" },
+  "berlín": { lat: 52.5200, lng: 13.4050, name: "Berlin" },
+  "paris": { lat: 48.8566, lng: 2.3522, name: "Paris" },
+  "parís": { lat: 48.8566, lng: 2.3522, name: "Paris" },
+  "munich": { lat: 48.1351, lng: 11.5820, name: "Munich" },
+  "múnich": { lat: 48.1351, lng: 11.5820, name: "Munich" },
+  "amsterdam": { lat: 52.3676, lng: 4.9041, name: "Amsterdam" },
+  "ámsterdam": { lat: 52.3676, lng: 4.9041, name: "Amsterdam" },
+  "london": { lat: 51.5074, lng: -0.1278, name: "London" },
+  "londres": { lat: 51.5074, lng: -0.1278, name: "London" },
+  "rome": { lat: 41.9028, lng: 12.4964, name: "Rome" },
+  "roma": { lat: 41.9028, lng: 12.4964, name: "Rome" },
+  "lisbon": { lat: 38.7223, lng: -9.1393, name: "Lisbon" },
+  "lisboa": { lat: 38.7223, lng: -9.1393, name: "Lisbon" },
+  "brussels": { lat: 50.8503, lng: 4.3517, name: "Brussels" },
+  "bruselas": { lat: 50.8503, lng: 4.3517, name: "Brussels" },
+  "frankfurt": { lat: 50.1109, lng: 8.6821, name: "Frankfurt" },
+  "hamburg": { lat: 53.5753, lng: 10.0153, name: "Hamburg" },
+  "hamburgo": { lat: 53.5753, lng: 10.0153, name: "Hamburg" },
+  "vienna": { lat: 48.2082, lng: 16.3738, name: "Vienna" },
+  "viena": { lat: 48.2082, lng: 16.3738, name: "Vienna" },
+  "warsaw": { lat: 52.2297, lng: 21.0122, name: "Warsaw" },
+  "varsovia": { lat: 52.2297, lng: 21.0122, name: "Warsaw" },
+  "prague": { lat: 50.0755, lng: 14.4378, name: "Prague" },
+  "praga": { lat: 50.0755, lng: 14.4378, name: "Prague" },
+};
+
+const CITY_IATA: Record<string, string> = {
+  "madrid": "MAD", "barcelona": "BCN", "berlin": "BER", "berlín": "BER",
+  "paris": "CDG", "parís": "CDG", "munich": "MUC", "múnich": "MUC",
+  "amsterdam": "AMS", "ámsterdam": "AMS", "london": "LHR", "londres": "LHR",
+  "rome": "FCO", "roma": "FCO", "lisbon": "LIS", "lisboa": "LIS",
+  "brussels": "BRU", "bruselas": "BRU", "frankfurt": "FRA",
+  "hamburg": "HAM", "hamburgo": "HAM", "vienna": "VIE", "viena": "VIE",
+  "warsaw": "WAW", "varsovia": "WAW", "prague": "PRG", "praga": "PRG",
+};
+
+function extractCoords(destJson: any): { lat: number; lng: number; dest: any } | null {
+  const list: any[] = Array.isArray(destJson?.data) ? destJson.data : Array.isArray(destJson) ? destJson : [];
+  for (const c of list) {
+    const lat = c?.coordinates?.latitude ?? c?.latitude ?? c?.lat ?? c?.pick_up_latitude;
+    const lng = c?.coordinates?.longitude ?? c?.longitude ?? c?.lng ?? c?.lon ?? c?.pick_up_longitude;
+    if (lat != null && lng != null) return { lat: Number(lat), lng: Number(lng), dest: c };
+  }
+  return null;
+}
+
+async function resolveCoords(ciudad: string, headers: Record<string, string>): Promise<{ lat: number; lng: number; name: string }> {
+  const lower = ciudad.trim().toLowerCase();
+  const queries = [ciudad, `${ciudad}, Spain`, `${ciudad} ES`, CITY_IATA[lower]].filter(Boolean) as string[];
+
+  for (const q of queries) {
+    try {
+      const u = new URL(`https://${HOST}/api/v1/cars/searchDestination`);
+      u.searchParams.set("query", q);
+      const r = await fetch(u, { headers });
+      if (!r.ok) { console.warn(`[cars] dest "${q}" status ${r.status}`); continue; }
+      const j = await r.json();
+      console.log(`[cars] dest "${q}" response:`, JSON.stringify(j).slice(0, 800));
+      const coords = extractCoords(j);
+      if (coords) {
+        return { lat: coords.lat, lng: coords.lng, name: coords.dest?.name ?? coords.dest?.city ?? ciudad };
+      }
+    } catch (e) {
+      console.warn(`[cars] dest "${q}" error`, e);
+    }
+  }
+
+  // Hardcoded fallback
+  const hc = CITY_FALLBACK_COORDS[lower];
+  if (hc) {
+    console.log(`[cars] using HARDCODED coords for ${ciudad}`);
+    return { lat: hc.lat, lng: hc.lng, name: hc.name };
+  }
+
+  // Nominatim geocoding fallback
+  try {
+    const u = new URL("https://nominatim.openstreetmap.org/search");
+    u.searchParams.set("q", ciudad);
+    u.searchParams.set("format", "json");
+    u.searchParams.set("limit", "1");
+    const r = await fetch(u, { headers: { "User-Agent": "SiteStayApp/1.0 (reservas@sitestayapp.com)" } });
+    if (r.ok) {
+      const j = await r.json();
+      console.log(`[cars] nominatim "${ciudad}":`, JSON.stringify(j).slice(0, 400));
+      if (Array.isArray(j) && j[0]?.lat && j[0]?.lon) {
+        return { lat: parseFloat(j[0].lat), lng: parseFloat(j[0].lon), name: j[0].display_name?.split(",")[0] ?? ciudad };
+      }
+    }
+  } catch (e) {
+    console.warn("[cars] nominatim error", e);
+  }
+
+  throw new Error(`No se pudieron obtener coordenadas para "${ciudad}" (Booking, hardcoded ni Nominatim).`);
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
@@ -48,30 +147,10 @@ serve(async (req) => {
     const drop_off_time = toHM(input.drop_off_time, "10:00");
     const headers = { "x-rapidapi-key": key, "x-rapidapi-host": HOST };
 
-    // 1) Destination
-    const destUrl = new URL(`https://${HOST}/api/v1/cars/searchDestination`);
-    destUrl.searchParams.set("query", input.ciudad);
-    const destRes = await fetch(destUrl, { headers });
-    if (!destRes.ok) throw new Error(`Cars dest ${destRes.status}: ${(await destRes.text()).slice(0, 200)}`);
-    const destJson = await destRes.json();
-    console.log("[cars] dest FULL response:", JSON.stringify(destJson).slice(0, 2000));
-    const destList: any[] = Array.isArray(destJson?.data) ? destJson.data : Array.isArray(destJson) ? destJson : [];
-    // Find first result with usable coordinates
-    let dest: any = null;
-    let lat: any = null;
-    let lng: any = null;
-    for (const candidate of destList) {
-      const cLat = candidate?.coordinates?.latitude ?? candidate?.latitude ?? candidate?.lat ?? candidate?.pick_up_latitude;
-      const cLng = candidate?.coordinates?.longitude ?? candidate?.longitude ?? candidate?.lng ?? candidate?.lon ?? candidate?.pick_up_longitude;
-      if (cLat != null && cLng != null) {
-        dest = candidate; lat = cLat; lng = cLng; break;
-      }
-    }
-    if (lat == null || lng == null) {
-      console.error("[cars] no coords. keys of first item:", destList[0] ? Object.keys(destList[0]) : "n/a");
-      throw new Error(`Sin coordenadas para "${input.ciudad}". Respuesta: ${JSON.stringify(destJson).slice(0, 300)}`);
-    }
-    console.log(`[cars] using dest: ${dest?.name ?? dest?.city ?? input.ciudad} lat=${lat} lng=${lng}`);
+    // 1) Resolve coords (query variants → hardcoded → Nominatim)
+    const { lat, lng, name: destName } = await resolveCoords(input.ciudad, headers);
+    const dest = { name: destName };
+    console.log(`[cars] resolved coords for ${input.ciudad}: lat=${lat} lng=${lng} (${destName})`);
 
     // 2) Search car rentals (same pickup & dropoff location). Try with EUR; fallback without currency.
     const buildUrl = (withCurrency: boolean) => {
