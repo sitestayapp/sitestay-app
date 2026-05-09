@@ -15,19 +15,61 @@ type In = {
   adultos?: number;
 };
 
-async function airport(key: string, query: string) {
+const ES_TO_EN: Record<string, string> = {
+  "berlín": "Berlin", "berlin": "Berlin",
+  "parís": "Paris", "paris": "Paris",
+  "londres": "London",
+  "roma": "Rome",
+  "milán": "Milan", "milan": "Milan",
+  "lisboa": "Lisbon",
+  "viena": "Vienna",
+  "atenas": "Athens",
+  "moscú": "Moscow",
+  "estocolmo": "Stockholm",
+  "copenhague": "Copenhagen",
+  "ginebra": "Geneva",
+  "zúrich": "Zurich", "zurich": "Zurich",
+  "praga": "Prague",
+  "bruselas": "Brussels",
+  "ámsterdam": "Amsterdam", "amsterdam": "Amsterdam",
+  "nueva york": "New York",
+  "tokio": "Tokyo",
+  "pekín": "Beijing", "pequín": "Beijing",
+};
+
+async function tryAirport(key: string, query: string, locale: string) {
   const u = new URL(`https://${HOST}/api/v1/flights/searchAirport`);
   u.searchParams.set("query", query);
-  u.searchParams.set("locale", "es-ES");
+  u.searchParams.set("locale", locale);
   const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST } });
-  if (!r.ok) throw new Error(`Airport ${query} ${r.status}`);
+  if (!r.ok) return null;
   const j = await r.json();
-  console.log(`[flights] airport ${query} sample:`, JSON.stringify(j).slice(0, 300));
-  const first = j?.data?.[0] ?? j?.[0];
-  const skyId = first?.skyId ?? first?.navigation?.relevantFlightParams?.skyId;
-  const entityId = first?.entityId ?? first?.navigation?.entityId ?? first?.navigation?.relevantFlightParams?.entityId;
-  if (!skyId || !entityId) throw new Error(`Sin aeropuerto para "${query}"`);
-  return { skyId: String(skyId), entityId: String(entityId), name: first?.presentation?.title ?? query };
+  console.log(`[flights] airport "${query}" (${locale}) FULL:`, JSON.stringify(j).slice(0, 800));
+  const list: any[] = Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
+  for (const it of list) {
+    const skyId = it?.skyId ?? it?.navigation?.relevantFlightParams?.skyId;
+    const entityId = it?.entityId ?? it?.navigation?.entityId ?? it?.navigation?.relevantFlightParams?.entityId;
+    if (skyId && entityId) {
+      return { skyId: String(skyId), entityId: String(entityId), name: it?.presentation?.title ?? query };
+    }
+  }
+  return null;
+}
+
+async function airport(key: string, query: string) {
+  let found = await tryAirport(key, query, "es-ES");
+  if (found) return found;
+  // Fallback: English locale
+  found = await tryAirport(key, query, "en-US");
+  if (found) return found;
+  // Fallback: translate Spanish city → English name
+  const en = ES_TO_EN[query.trim().toLowerCase()];
+  if (en && en.toLowerCase() !== query.trim().toLowerCase()) {
+    console.log(`[flights] retrying with English name: ${en}`);
+    found = await tryAirport(key, en, "en-US");
+    if (found) return found;
+  }
+  throw new Error(`Sin aeropuerto para "${query}"`);
 }
 
 serve(async (req) => {
