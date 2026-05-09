@@ -83,30 +83,29 @@ serve(async (req) => {
     }
     const adults = input.adultos ?? 1;
 
-    const [from, to] = await Promise.all([airport(key, input.origen), airport(key, input.destino)]);
-
-    const u = new URL(`https://${HOST}/api/v1/flights/searchFlights`);
-    u.searchParams.set("originSkyId", from.skyId);
-    u.searchParams.set("destinationSkyId", to.skyId);
-    u.searchParams.set("originEntityId", from.entityId);
-    u.searchParams.set("destinationEntityId", to.entityId);
-    u.searchParams.set("date", input.fecha_salida);
-    if (input.fecha_vuelta) u.searchParams.set("returnDate", input.fecha_vuelta);
-    u.searchParams.set("adults", String(adults));
-    u.searchParams.set("currency", "EUR");
-    u.searchParams.set("market", "es-ES");
-    u.searchParams.set("countryCode", "ES");
-
-    const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST } });
-    if (!r.ok) throw new Error(`Flights ${r.status}: ${(await r.text()).slice(0, 200)}`);
-    const j = await r.json();
-    const its = j?.data?.itineraries ?? j?.itineraries ?? [];
-    console.log(`[flights] found: ${Array.isArray(its) ? its.length : 0}`);
-
     const fmtTime = (s?: string) => s ? new Date(s).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "";
     const fmtDur = (m?: number) => m ? `${Math.floor(m / 60)}h ${m % 60}m` : "";
 
-    const items = (Array.isArray(its) ? its : []).slice(0, 6).map((it: any) => {
+    // ---------- PRIMARY: sky-scrapper ----------
+    const trySkyScrapper = async (): Promise<any[]> => {
+      const [from, to] = await Promise.all([airport(key, input.origen), airport(key, input.destino)]);
+      const u = new URL(`https://${HOST}/api/v1/flights/searchFlights`);
+      u.searchParams.set("originSkyId", from.skyId);
+      u.searchParams.set("destinationSkyId", to.skyId);
+      u.searchParams.set("originEntityId", from.entityId);
+      u.searchParams.set("destinationEntityId", to.entityId);
+      u.searchParams.set("date", input.fecha_salida);
+      if (input.fecha_vuelta) u.searchParams.set("returnDate", input.fecha_vuelta);
+      u.searchParams.set("adults", String(adults));
+      u.searchParams.set("currency", "EUR");
+      u.searchParams.set("market", "es-ES");
+      u.searchParams.set("countryCode", "ES");
+      const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST } });
+      if (!r.ok) throw new Error(`sky-scrapper ${r.status}`);
+      const j = await r.json();
+      const its = j?.data?.itineraries ?? j?.itineraries ?? [];
+      if (!Array.isArray(its) || its.length === 0) throw new Error("sky-scrapper vacío");
+      return its.slice(0, 6).map((it: any) => {
       const legs = it?.legs ?? [];
       const out = legs[0] ?? {};
       const back = legs[1];
@@ -133,7 +132,113 @@ serve(async (req) => {
         url: null,
       };
     });
+    };
 
+    // ---------- FALLBACK 1: priceline-com2 ----------
+    const tryPriceline = async (): Promise<any[]> => {
+      const HOST_P = "priceline-com2.p.rapidapi.com";
+      const path = input.fecha_vuelta ? "/flights/search-roundtrip" : "/flights/search-oneway";
+      const u = new URL(`https://${HOST_P}${path}`);
+      u.searchParams.set("origin", input.origen);
+      u.searchParams.set("destination", input.destino);
+      u.searchParams.set("departureDate", input.fecha_salida);
+      if (input.fecha_vuelta) u.searchParams.set("returnDate", input.fecha_vuelta);
+      u.searchParams.set("adults", String(adults));
+      u.searchParams.set("currency", "EUR");
+      const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_P } });
+      if (!r.ok) throw new Error(`priceline flights ${r.status}`);
+      const j = await r.json();
+      const list = j?.data?.itineraries ?? j?.data?.results ?? j?.itineraries ?? j?.results ?? [];
+      if (!Array.isArray(list) || list.length === 0) throw new Error("priceline flights vacío");
+      return list.slice(0, 6).map((it: any) => {
+        const segs = it?.slices?.[0]?.segments ?? it?.segments ?? [];
+        const first = segs[0] ?? {};
+        const last = segs[segs.length - 1] ?? first;
+        const back = it?.slices?.[1]?.segments ?? null;
+        return {
+          id: String(it?.id ?? crypto.randomUUID()),
+          airline: first?.carrier?.name ?? first?.airline ?? "Aerolínea",
+          airline_logo: first?.carrier?.logo ?? null,
+          origin: first?.origin?.code ?? input.origen,
+          destination: last?.destination?.code ?? input.destino,
+          depart_time: fmtTime(first?.departureTime),
+          arrive_time: fmtTime(last?.arrivalTime),
+          duration: fmtDur(it?.slices?.[0]?.duration ?? it?.duration),
+          stops: Math.max(0, segs.length - 1),
+          return_depart_time: back?.[0] ? fmtTime(back[0]?.departureTime) : null,
+          return_arrive_time: back ? fmtTime(back[back.length - 1]?.arrivalTime) : null,
+          return_duration: back ? fmtDur(it?.slices?.[1]?.duration) : null,
+          return_stops: back ? Math.max(0, back.length - 1) : null,
+          price_total: it?.price?.total ?? it?.totalPrice ?? null,
+          price_label: it?.price?.formatted ?? (it?.price?.total ? `€${it.price.total}` : null),
+          currency: "EUR",
+          date: input.fecha_salida,
+          return_date: input.fecha_vuelta ?? null,
+          url: it?.deepLink ?? null,
+        };
+      });
+    };
+
+    // ---------- FALLBACK 2: expedia13 ----------
+    const tryExpedia = async (): Promise<any[]> => {
+      const HOST_E = "expedia13.p.rapidapi.com";
+      const u = new URL(`https://${HOST_E}/api/v1/flights/searchFlights`);
+      u.searchParams.set("origin", input.origen);
+      u.searchParams.set("destination", input.destino);
+      u.searchParams.set("departureDate", input.fecha_salida);
+      if (input.fecha_vuelta) u.searchParams.set("returnDate", input.fecha_vuelta);
+      u.searchParams.set("adults", String(adults));
+      u.searchParams.set("currency", "EUR");
+      const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_E } });
+      if (!r.ok) throw new Error(`expedia flights ${r.status}`);
+      const j = await r.json();
+      const list = j?.data?.flights ?? j?.data?.results ?? j?.flights ?? j?.results ?? [];
+      if (!Array.isArray(list) || list.length === 0) throw new Error("expedia flights vacío");
+      return list.slice(0, 6).map((it: any) => {
+        const segs = it?.segments ?? it?.legs?.[0]?.segments ?? [];
+        const first = segs[0] ?? {};
+        const last = segs[segs.length - 1] ?? first;
+        return {
+          id: String(it?.id ?? crypto.randomUUID()),
+          airline: first?.airlineName ?? first?.carrier?.name ?? "Aerolínea",
+          airline_logo: first?.airlineLogo ?? null,
+          origin: first?.departureAirport?.code ?? input.origen,
+          destination: last?.arrivalAirport?.code ?? input.destino,
+          depart_time: fmtTime(first?.departureTime),
+          arrive_time: fmtTime(last?.arrivalTime),
+          duration: fmtDur(it?.duration ?? it?.totalDuration),
+          stops: Math.max(0, segs.length - 1),
+          return_depart_time: null, return_arrive_time: null, return_duration: null, return_stops: null,
+          price_total: it?.price?.total ?? it?.totalPrice ?? null,
+          price_label: it?.price?.formatted ?? (it?.price?.total ? `€${it.price.total}` : null),
+          currency: "EUR",
+          date: input.fecha_salida,
+          return_date: input.fecha_vuelta ?? null,
+          url: it?.deepLink ?? null,
+        };
+      });
+    };
+
+    const providers: Array<[string, () => Promise<any[]>]> = [
+      ["sky-scrapper", trySkyScrapper],
+      ["priceline-com2", tryPriceline],
+      ["expedia13", tryExpedia],
+    ];
+    let items: any[] = [];
+    for (const [name, fn] of providers) {
+      try {
+        items = await fn();
+        if (items.length > 0) {
+          console.log(`[flights] ✅ provider responded: ${name} (${items.length} results)`);
+          break;
+        }
+      } catch (e) {
+        console.warn(`[flights] ${name} failed:`, e instanceof Error ? e.message : e);
+      }
+    }
+    if (items.length === 0) {
+      return new Response(JSON.stringify({ results: [], error: "No hay vuelos disponibles en este momento." }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     return new Response(JSON.stringify({ results: items }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("flights error", e);
