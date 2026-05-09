@@ -152,8 +152,11 @@ serve(async (req) => {
     const dest = { name: destName };
     console.log(`[cars] resolved coords for ${input.ciudad}: lat=${lat} lng=${lng} (${destName})`);
 
-    // 2) Search car rentals (same pickup & dropoff location). Try with EUR; fallback without currency.
-    const buildUrl = (withCurrency: boolean) => {
+    const nights = Math.max(1, Math.round((new Date(drop_off_date).getTime() - new Date(pick_up_date).getTime()) / 86400000));
+
+    // ---------- PRIMARY: booking-com15 cars ----------
+    const tryBookingCars = async (): Promise<any[]> => {
+      const buildUrl = (withCurrency: boolean) => {
       const url = new URL(`https://${HOST}/api/v1/cars/searchCarRentals`);
       url.searchParams.set("pick_up_latitude", String(lat));
       url.searchParams.set("pick_up_longitude", String(lng));
@@ -168,36 +171,19 @@ serve(async (req) => {
       url.searchParams.set("location", "Default");
       return url;
     };
-
-    let res = await fetch(buildUrl(true), { headers });
-    let json: any = null;
-    if (!res.ok) {
-      const errTxt = (await res.text()).slice(0, 300);
-      console.warn(`[cars] EUR attempt failed ${res.status}: ${errTxt} — retrying without currency`);
-      res = await fetch(buildUrl(false), { headers });
-      if (!res.ok) throw new Error(`Cars search ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    }
-    json = await res.json();
-    console.log("[cars] search FULL response:", JSON.stringify(json).slice(0, 2000));
-    const list =
-      json?.data?.search_results ??
-      json?.data?.searchResults ??
-      json?.data?.results ??
-      json?.data?.result ??
-      json?.searchResults ??
-      json?.search_results ??
-      json?.results ??
-      (Array.isArray(json?.data) ? json.data : null) ??
-      [];
-    console.log(`[cars] found: ${Array.isArray(list) ? list.length : 0}`);
-    if (!Array.isArray(list) || list.length === 0) {
-      const apiMsg = json?.message ?? json?.error ?? json?.data?.message ?? "respuesta vacía";
-      return new Response(JSON.stringify({ results: [], error: `Sin coches disponibles. API: ${typeof apiMsg === "string" ? apiMsg : JSON.stringify(apiMsg)}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
-    }
-
-    const nights = Math.max(1, Math.round((new Date(drop_off_date).getTime() - new Date(pick_up_date).getTime()) / 86400000));
-
-    const items = (Array.isArray(list) ? list : []).slice(0, 6).map((r: any) => {
+      let res = await fetch(buildUrl(true), { headers });
+      if (!res.ok) {
+        console.warn(`[cars/primary] EUR ${res.status}, retrying no currency`);
+        res = await fetch(buildUrl(false), { headers });
+        if (!res.ok) throw new Error(`booking-com15 cars ${res.status}`);
+      }
+      const json = await res.json();
+      const list =
+        json?.data?.search_results ?? json?.data?.searchResults ?? json?.data?.results ??
+        json?.data?.result ?? json?.searchResults ?? json?.search_results ?? json?.results ??
+        (Array.isArray(json?.data) ? json.data : null) ?? [];
+      if (!Array.isArray(list) || list.length === 0) throw new Error("booking-com15 cars: respuesta vacía");
+      return list.slice(0, 6).map((r: any) => {
       const v = r?.vehicle_info ?? r?.vehicleInfo ?? {};
       const sup = r?.supplier_info ?? r?.supplierInfo ?? {};
       const price = r?.pricing_info?.price ?? r?.pricingInfo?.price ?? r?.price?.amount ?? null;
@@ -219,11 +205,116 @@ serve(async (req) => {
         currency: "EUR",
         pick_up_date,
         drop_off_date,
-        location: dest?.name ?? input.ciudad,
+          location: destName ?? input.ciudad,
         url: r?.forward_url ?? r?.forwardUrl ?? null,
       };
     });
+    };
 
+    // ---------- FALLBACK 1: priceline-com2 ----------
+    const tryPriceline = async (): Promise<any[]> => {
+      const HOST_P = "priceline-com2.p.rapidapi.com";
+      const u = new URL(`https://${HOST_P}/cars/search`);
+      u.searchParams.set("pickup_latitude", String(lat));
+      u.searchParams.set("pickup_longitude", String(lng));
+      u.searchParams.set("dropoff_latitude", String(lat));
+      u.searchParams.set("dropoff_longitude", String(lng));
+      u.searchParams.set("pickup_date", pick_up_date);
+      u.searchParams.set("dropoff_date", drop_off_date);
+      u.searchParams.set("pickup_time", pick_up_time);
+      u.searchParams.set("dropoff_time", drop_off_time);
+      u.searchParams.set("currency", "EUR");
+      const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_P } });
+      if (!r.ok) throw new Error(`priceline cars ${r.status}`);
+      const j = await r.json();
+      const list = j?.data?.results ?? j?.data?.cars ?? j?.results ?? j?.cars ?? [];
+      if (!Array.isArray(list) || list.length === 0) throw new Error("priceline cars vacío");
+      return list.slice(0, 6).map((r: any) => {
+        const total = Number(r?.totalPrice ?? r?.price?.total ?? r?.price ?? 0) || null;
+        return {
+          id: String(r?.id ?? crypto.randomUUID()),
+          model: r?.carName ?? r?.name ?? r?.vehicle?.name ?? "Vehículo",
+          group: r?.carClass ?? r?.category ?? null,
+          company: r?.partnerName ?? r?.supplier?.name ?? null,
+          company_logo: r?.partnerLogo ?? r?.supplier?.logo ?? null,
+          photo: r?.imageUrl ?? r?.image ?? r?.vehicle?.image ?? null,
+          seats: r?.passengers ?? r?.seats ?? null,
+          transmission: r?.transmission ?? null,
+          bags: r?.bags ?? null,
+          rating: r?.rating ?? null,
+          price_per_day: total ? +(total / nights).toFixed(2) : null,
+          price_total: total,
+          currency: "EUR",
+          pick_up_date, drop_off_date,
+          location: destName ?? input.ciudad,
+          url: r?.deepLink ?? r?.url ?? null,
+        };
+      });
+    };
+
+    // ---------- FALLBACK 2: expedia13 ----------
+    const tryExpedia = async (): Promise<any[]> => {
+      const HOST_E = "expedia13.p.rapidapi.com";
+      const u = new URL(`https://${HOST_E}/api/v1/car/searchCars`);
+      u.searchParams.set("pickUpLat", String(lat));
+      u.searchParams.set("pickUpLng", String(lng));
+      u.searchParams.set("dropOffLat", String(lat));
+      u.searchParams.set("dropOffLng", String(lng));
+      u.searchParams.set("pickUpDate", pick_up_date);
+      u.searchParams.set("dropOffDate", drop_off_date);
+      u.searchParams.set("pickUpTime", pick_up_time);
+      u.searchParams.set("dropOffTime", drop_off_time);
+      u.searchParams.set("currency", "EUR");
+      const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_E } });
+      if (!r.ok) throw new Error(`expedia cars ${r.status}`);
+      const j = await r.json();
+      const list = j?.data?.offers ?? j?.data?.results ?? j?.results ?? j?.offers ?? [];
+      if (!Array.isArray(list) || list.length === 0) throw new Error("expedia cars vacío");
+      return list.slice(0, 6).map((r: any) => {
+        const total = Number(r?.price?.total ?? r?.totalPrice ?? r?.price ?? 0) || null;
+        return {
+          id: String(r?.id ?? crypto.randomUUID()),
+          model: r?.vehicle?.name ?? r?.carName ?? "Vehículo",
+          group: r?.vehicle?.category ?? null,
+          company: r?.vendor?.name ?? r?.partnerName ?? null,
+          company_logo: r?.vendor?.logo ?? null,
+          photo: r?.vehicle?.image ?? r?.imageUrl ?? null,
+          seats: r?.vehicle?.seats ?? null,
+          transmission: r?.vehicle?.transmission ?? null,
+          bags: r?.vehicle?.bags ?? null,
+          rating: r?.rating ?? null,
+          price_per_day: total ? +(total / nights).toFixed(2) : null,
+          price_total: total,
+          currency: "EUR",
+          pick_up_date, drop_off_date,
+          location: destName ?? input.ciudad,
+          url: r?.deepLink ?? r?.url ?? null,
+        };
+      });
+    };
+
+    const providers: Array<[string, () => Promise<any[]>]> = [
+      ["booking-com15", tryBookingCars],
+      ["priceline-com2", tryPriceline],
+      ["expedia13", tryExpedia],
+    ];
+    let items: any[] = [];
+    let lastErr: string = "";
+    for (const [name, fn] of providers) {
+      try {
+        items = await fn();
+        if (items.length > 0) {
+          console.log(`[cars] ✅ provider responded: ${name} (${items.length} results)`);
+          break;
+        }
+      } catch (e) {
+        lastErr = e instanceof Error ? e.message : String(e);
+        console.warn(`[cars] ${name} failed:`, lastErr);
+      }
+    }
+    if (items.length === 0) {
+      return new Response(JSON.stringify({ results: [], error: `No hay coches disponibles en este momento.` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
     return new Response(JSON.stringify({ results: items }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
     console.error("cars error", e);
