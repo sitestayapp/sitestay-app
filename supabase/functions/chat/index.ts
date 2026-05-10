@@ -116,16 +116,25 @@ const TOOLS = [
 async function runTool(name: string, input: any, ctx: { userId: string | null; authHeader: string | null }) {
   const callSearch = async (fnName: string, kind: string) => {
     const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/${fnName}`;
+    console.log(`[chat] → ${fnName} URL:`, url);
+    console.log(`[chat] → ${fnName} payload:`, JSON.stringify(input));
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
     const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: ctx.authHeader ?? `Bearer ${Deno.env.get("SUPABASE_ANON_KEY")}`,
+        Authorization: ctx.authHeader ?? `Bearer ${anonKey}`,
+        apikey: anonKey,
       },
       body: JSON.stringify(input),
     });
-    const json = await res.json();
-    console.log(`[chat] ${fnName} status:`, res.status, "count:", Array.isArray(json?.results) ? json.results.length : "n/a", "error:", json?.error ?? null);
+    const json = await res.json().catch(() => ({ error: `HTTP ${res.status} sin cuerpo JSON` }));
+    console.log(`[chat] ← ${fnName} status:`, res.status, "| results:", Array.isArray(json?.results) ? json.results.length : "n/a", "| error:", json?.error ?? null);
+    if (!res.ok || json?.error) {
+      const errMsg = json?.error ?? `Error ${res.status} al llamar a ${fnName}`;
+      console.error(`[chat] ✗ ${fnName} falló:`, errMsg);
+      return { text: JSON.stringify({ error: errMsg }), options: [], kind };
+    }
     return { text: JSON.stringify(json).slice(0, 12000), options: Array.isArray(json?.results) ? json.results.slice(0, 5) : [], kind };
   };
   if (name === "buscar_alojamientos") return await callSearch("search-accommodations", "accommodation");
