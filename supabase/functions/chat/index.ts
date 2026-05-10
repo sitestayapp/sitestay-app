@@ -188,7 +188,8 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { messages } = await req.json();
+    const body = await req.json().catch(() => ({}));
+    const messages: any[] = Array.isArray(body?.messages) ? body.messages : [];
     const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY");
     if (!ANTHROPIC_API_KEY) {
       return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY no configurada" }), {
@@ -215,6 +216,14 @@ serve(async (req) => {
     const convo: any[] = messages
       .filter((m: any) => m.content != null && (typeof m.content !== "string" || m.content.trim().length > 0))
       .map((m: any) => ({ role: m.role, content: m.content }));
+
+    if (convo.length === 0) {
+      return new Response(JSON.stringify({ error: "Se requiere al menos un mensaje" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
@@ -284,7 +293,7 @@ serve(async (req) => {
     });
 
     return new Response(stream, {
-      headers: { ...corsHeaders, "Content-Type": "text/event-stream" },
+      headers: { ...corsHeaders, "Content-Type": "text/event-stream; charset=utf-8" },
     });
   } catch (e) {
     console.error("chat error", e);
