@@ -130,9 +130,9 @@ async function runTool(name: string, input: any, ctx: { userId: string | null; a
     });
     const json = await res.json().catch(() => ({ error: `HTTP ${res.status} sin cuerpo JSON` }));
     console.log(`[chat] ← ${fnName} status:`, res.status, "| results:", Array.isArray(json?.results) ? json.results.length : "n/a", "| error:", json?.error ?? null);
-    if (!res.ok || json?.error) {
+    if (!res.ok) {
       const errMsg = json?.error ?? `Error ${res.status} al llamar a ${fnName}`;
-      console.error(`[chat] ✗ ${fnName} falló:`, errMsg);
+      console.error(`[chat] ✗ ${fnName} HTTP error:`, errMsg);
       return { text: JSON.stringify({ error: errMsg }), options: [], kind };
     }
     return { text: JSON.stringify(json).slice(0, 12000), options: Array.isArray(json?.results) ? json.results.slice(0, 5) : [], kind };
