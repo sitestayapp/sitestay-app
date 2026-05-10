@@ -5,8 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const PRIMARY_FROM = "SiteStayApp <reservas@sitestayapp.com>";
-const FALLBACK_FROM = "SiteStayApp <onboarding@resend.dev>";
+const FROM = "SiteStayApp <reservas@sitestayapp.com>";
 
 function fmtDate(s: string) {
   try {
@@ -112,17 +111,8 @@ serve(async (req) => {
       return { r, data: await r.json() };
     }
 
-    let { r: res, data } = await send(PRIMARY_FROM);
-    console.log("[send-booking-email] primary status", res.status, data);
-    if (!res.ok) {
-      const msg = (data?.message || "").toString().toLowerCase();
-      const domainIssue = res.status === 403 || msg.includes("domain") || msg.includes("verify") || msg.includes("not verified");
-      if (domainIssue) {
-        console.warn("[send-booking-email] primary failed, falling back to onboarding@resend.dev");
-        ({ r: res, data } = await send(FALLBACK_FROM));
-        console.log("[send-booking-email] fallback status", res.status, data);
-      }
-    }
+    const { r: res, data } = await send(FROM);
+    console.log("[send-booking-email] send status", res.status, data);
     if (!res.ok) {
       return new Response(JSON.stringify({ error: data?.message || "Resend error", details: data }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },

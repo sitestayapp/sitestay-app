@@ -282,9 +282,9 @@ async function searchTripadvisor(key: string, q: SearchInput) {
 
 async function searchAccommodationWithFallback(key: string, input: SearchInput) {
   const providers: Array<[string, () => Promise<any[]>]> = [
-    ["booking-com15 (DataCrawler)", () => searchBooking(key, input)],
     ["booking-com (Tipsters)", () => searchBookingTipsters(key, input)],
-    ["tripadvisor-com1", () => searchTripadvisor(key, input)],
+    ["booking-com15 (DataCrawler)", () => searchBooking(key, input)],
+    ["airbnb19", () => searchAirbnb(key, input)],
   ];
   let lastErr: any = null;
   for (const [name, fn] of providers) {
@@ -321,15 +321,12 @@ serve(async (req) => {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const [primaryRes, airbnbRes] = await Promise.allSettled([
-      searchAccommodationWithFallback(key, input),
-      searchAirbnb(key, input),
-    ]);
     let results: any[] = [];
-    if (primaryRes.status === "fulfilled") results = results.concat(primaryRes.value);
-    else console.error("[search] all primary providers failed:", primaryRes.reason);
-    if (airbnbRes.status === "fulfilled") results = results.concat(airbnbRes.value);
-    else console.warn("[search] airbnb failed (silenciado):", airbnbRes.reason);
+    try {
+      results = await searchAccommodationWithFallback(key, input);
+    } catch (e) {
+      console.error("[search] all providers failed:", e instanceof Error ? e.message : e);
+    }
 
     if (results.length === 0) {
       return new Response(JSON.stringify({ results: [], error: "No hay alojamientos disponibles en este momento. Intenta con otras fechas o ciudad." }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });

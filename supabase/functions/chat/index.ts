@@ -212,7 +212,9 @@ serve(async (req) => {
       } catch { /* ignore */ }
     }
 
-    const convo: any[] = messages.map((m: any) => ({ role: m.role, content: m.content }));
+    const convo: any[] = messages
+      .filter((m: any) => m.content != null && (typeof m.content !== "string" || m.content.trim().length > 0))
+      .map((m: any) => ({ role: m.role, content: m.content }));
     const encoder = new TextEncoder();
 
     const stream = new ReadableStream({
