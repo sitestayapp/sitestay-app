@@ -308,7 +308,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
   try {
     const key = Deno.env.get("RAPIDAPI_KEY");
-    console.log("[search] RAPIDAPI_KEY present:", !!key);
+    console.log("[search] RAPIDAPI_KEY present:", !!key, "| prefix:", key ? key.slice(0, 10) : "MISSING");
     if (!key) {
       return new Response(JSON.stringify({ error: "RAPIDAPI_KEY no configurada" }), {
         status: 500,
@@ -329,7 +329,9 @@ serve(async (req) => {
     }
 
     if (results.length === 0) {
-      return new Response(JSON.stringify({ results: [], error: "No hay alojamientos disponibles en este momento. Intenta con otras fechas o ciudad." }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      const body = JSON.stringify({ results: [], error: "No hay alojamientos disponibles en este momento. Intenta con otras fechas o ciudad." });
+      console.log("[search] FINAL RESPONSE (0 results):", body);
+      return new Response(body, { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     results.sort((a, b) => {
@@ -338,6 +340,7 @@ serve(async (req) => {
       return pa - pb;
     });
 
+    console.log("[search] FINAL RESPONSE: results count =", results.length, "| first:", JSON.stringify(results[0]).slice(0, 200));
     return new Response(JSON.stringify({ results }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
