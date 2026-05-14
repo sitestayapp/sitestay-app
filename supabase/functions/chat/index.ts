@@ -194,7 +194,8 @@ async function runTool(name: string, input: any, ctx: { userId: string | null; a
           vuelo: input.vuelo,
         }),
       });
-      console.log("[chat] email send status:", emailRes.status);
+      const emailBody = await emailRes.text().catch(() => "");
+      console.log("[chat] email send status:", emailRes.status, "| body:", emailBody.slice(0, 300));
     } catch (e) {
       console.error("[chat] email send failed", e);
     }

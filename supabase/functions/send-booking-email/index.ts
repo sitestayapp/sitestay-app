@@ -5,7 +5,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const FROM = "SiteStayApp <reservas@sitestayapp.com>";
+const FROM = Deno.env.get("EMAIL_FROM") ?? "NomadDesk <onboarding@resend.dev>";
 
 function fmtDate(s: string) {
   try {
