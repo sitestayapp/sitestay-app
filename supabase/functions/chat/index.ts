@@ -115,10 +115,11 @@ const TOOLS = [
 
 async function runTool(name: string, input: any, ctx: { userId: string | null; authHeader: string | null }) {
   const callSearch = async (fnName: string, kind: string) => {
-    const url = `${Deno.env.get("SUPABASE_URL")}/functions/v1/${fnName}`;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "https://yiacfytymftavgydvxaa.supabase.co";
+    const url = `${supabaseUrl}/functions/v1/${fnName}`;
     console.log(`[chat] → ${fnName} URL:`, url);
     console.log(`[chat] → ${fnName} payload:`, JSON.stringify(input));
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpYWNmeXR5bWZ0YXZneWR2eGFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MTY1NDAsImV4cCI6MjA5Mzk5MjU0MH0.NpJrJZrTTLHW7U_S1hG03CRkbtYLJGjuFDwbjcUlOhI";
     const res = await fetch(url, {
       method: "POST",
       headers: {
