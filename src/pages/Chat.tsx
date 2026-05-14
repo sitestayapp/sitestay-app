@@ -93,9 +93,9 @@ export default function Chat() {
     try {
       const history = [...messages, userMsg].map(({ role, content }) => ({ role, content }));
       const { data: { session } } = await supabase.auth.getSession();
-      const ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY ?? "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpYWNmeXR5bWZ0YXZneWR2eGFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MTY1NDAsImV4cCI6MjA5Mzk5MjU0MH0.NpJrJZrTTLHW7U_S1hG03CRkbtYLJGjuFDwbjcUlOhI") as string;
+      const ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlpYWNmeXR5bWZ0YXZneWR2eGFhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg0MTY1NDAsImV4cCI6MjA5Mzk5MjU0MH0.NpJrJZrTTLHW7U_S1hG03CRkbtYLJGjuFDwbjcUlOhI";
       const token = session?.access_token ?? ANON_KEY;
-      const url = `${import.meta.env.VITE_SUPABASE_URL ?? "https://yiacfytymftavgydvxaa.supabase.co"}/functions/v1/chat`;
+      const url = "https://yiacfytymftavgydvxaa.supabase.co/functions/v1/chat";
       const resp = await fetch(url, {
         method: "POST",
         headers: {
