@@ -262,7 +262,7 @@ serve(async (req) => {
                 "content-type": "application/json",
               },
               body: JSON.stringify({
-                model: "claude-sonnet-4-5-20250929",
+                model: "claude-sonnet-4-6",
                 max_tokens: 2048,
                 system: SYSTEM_PROMPT,
                 tools: TOOLS,
@@ -273,7 +273,7 @@ serve(async (req) => {
             if (!res.ok) {
               const text = await res.text();
               console.error("Anthropic error", res.status, text);
-              send(`\n\n_Error del modelo: ${res.status}_`);
+              send(`\n\n_Error del modelo: ${res.status} — ${text.slice(0, 200)}_`);
               break;
             }
             const data = await res.json();
