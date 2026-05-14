@@ -225,6 +225,7 @@ serve(async (req) => {
       ["expedia13", tryExpedia],
     ];
     let items: any[] = [];
+    let lastErr = "";
     for (const [name, fn] of providers) {
       try {
         items = await fn();
@@ -233,11 +234,12 @@ serve(async (req) => {
           break;
         }
       } catch (e) {
-        console.warn(`[flights] ${name} failed:`, e instanceof Error ? e.message : e);
+        lastErr = e instanceof Error ? e.message : String(e);
+        console.warn(`[flights] ${name} failed:`, lastErr);
       }
     }
     if (items.length === 0) {
-      return new Response(JSON.stringify({ results: [], error: "No hay vuelos disponibles en este momento." }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ results: [], error: `No hay vuelos disponibles. Último error: ${lastErr || "sin detalles"}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     return new Response(JSON.stringify({ results: items }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {

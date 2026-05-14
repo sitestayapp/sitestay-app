@@ -313,7 +313,7 @@ serve(async (req) => {
       }
     }
     if (items.length === 0) {
-      return new Response(JSON.stringify({ results: [], error: `No hay coches disponibles en este momento.` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ results: [], error: `No hay coches disponibles. Último error: ${lastErr || "sin detalles"}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     return new Response(JSON.stringify({ results: items }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
