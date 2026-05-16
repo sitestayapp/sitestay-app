@@ -154,6 +154,48 @@ serve(async (req) => {
 
     const nights = Math.max(1, Math.round((new Date(drop_off_date).getTime() - new Date(pick_up_date).getTime()) / 86400000));
 
+    // ---------- PROVIDER 0: booking-com (Tipsters) ----------
+    const tryTipstersCars = async (): Promise<any[]> => {
+      const HOST_T = "booking-com.p.rapidapi.com";
+      const url = new URL(`https://${HOST_T}/v1/cars/search`);
+      url.searchParams.set("pick_up_latitude", String(lat));
+      url.searchParams.set("pick_up_longitude", String(lng));
+      url.searchParams.set("drop_off_latitude", String(lat));
+      url.searchParams.set("drop_off_longitude", String(lng));
+      url.searchParams.set("pick_up_date", pick_up_date);
+      url.searchParams.set("drop_off_date", drop_off_date);
+      url.searchParams.set("pick_up_time", pick_up_time);
+      url.searchParams.set("drop_off_time", drop_off_time);
+      url.searchParams.set("currency", "EUR");
+      url.searchParams.set("locale", "es");
+      const res = await fetch(url, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_T } });
+      if (!res.ok) throw new Error(`tipsters cars ${res.status}`);
+      const json = await res.json();
+      const list = json?.result ?? json?.results ?? json?.data ?? (Array.isArray(json) ? json : []);
+      if (!Array.isArray(list) || list.length === 0) throw new Error("tipsters cars: vacío");
+      return list.slice(0, 6).map((r: any) => {
+        const total = Number(r?.price?.total ?? r?.min_total_price ?? r?.price ?? 0) || null;
+        return {
+          id: String(r?.vehicle_id ?? r?.id ?? crypto.randomUUID()),
+          model: r?.vehicle?.name ?? r?.v_name ?? r?.name ?? "Vehículo",
+          group: r?.vehicle?.category ?? r?.group ?? null,
+          company: r?.supplier?.name ?? r?.company_name ?? null,
+          company_logo: r?.supplier?.logo ?? null,
+          photo: r?.vehicle?.image ?? r?.image_url ?? null,
+          seats: r?.vehicle?.seats ?? r?.seats ?? null,
+          transmission: r?.vehicle?.transmission ?? r?.transmission ?? null,
+          bags: r?.vehicle?.bags ?? r?.bags ?? null,
+          rating: r?.rating ?? null,
+          price_per_day: total ? +(total / nights).toFixed(2) : null,
+          price_total: total,
+          currency: "EUR",
+          pick_up_date, drop_off_date,
+          location: destName ?? input.ciudad,
+          url: r?.url ?? null,
+        };
+      });
+    };
+
     // ---------- PRIMARY: booking-com15 cars ----------
     const tryBookingCars = async (): Promise<any[]> => {
       const buildUrl = (withCurrency: boolean) => {
@@ -294,9 +336,10 @@ serve(async (req) => {
     };
 
     const providers: Array<[string, () => Promise<any[]>]> = [
+      ["booking-com (Tipsters)", tryTipstersCars],
+      ["booking-com15", tryBookingCars],
       ["priceline-com2", tryPriceline],
       ["expedia13", tryExpedia],
-      ["booking-com15", tryBookingCars],  // last: prone to 429 on free tier
     ];
     let items: any[] = [];
     const errs: string[] = [];
