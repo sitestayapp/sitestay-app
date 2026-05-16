@@ -198,7 +198,6 @@ serve(async (req) => {
 
     // ---------- PRIMARY: booking-com15 cars ----------
     const tryBookingCars = async (): Promise<any[]> => {
-      const buildUrl = (withCurrency: boolean) => {
       const url = new URL(`https://${HOST}/api/v1/cars/searchCarRentals`);
       url.searchParams.set("pick_up_latitude", String(lat));
       url.searchParams.set("pick_up_longitude", String(lng));
@@ -209,16 +208,10 @@ serve(async (req) => {
       url.searchParams.set("pick_up_time", pick_up_time);
       url.searchParams.set("drop_off_time", drop_off_time);
       url.searchParams.set("driver_age", "30");
-      if (withCurrency) url.searchParams.set("currency_code", "EUR");
-      url.searchParams.set("location", "Default");
-      return url;
-    };
-      let res = await fetch(buildUrl(true), { headers });
-      if (!res.ok) {
-        console.warn(`[cars/primary] EUR ${res.status}, retrying no currency`);
-        res = await fetch(buildUrl(false), { headers });
-        if (!res.ok) throw new Error(`booking-com15 cars ${res.status}`);
-      }
+      url.searchParams.set("currency_code", "USD");
+      url.searchParams.set("location", "US");
+      const res = await fetch(url, { headers });
+      if (!res.ok) throw new Error(`booking-com15 cars ${res.status}`);
       const json = await res.json();
       const list =
         json?.data?.search_results ?? json?.data?.searchResults ?? json?.data?.results ??
@@ -244,7 +237,7 @@ serve(async (req) => {
         rating: r?.rating_info?.average ?? r?.ratingInfo?.average ?? null,
         price_per_day: perDay,
         price_total: total,
-        currency: "EUR",
+        currency: "USD",
         pick_up_date,
         drop_off_date,
           location: destName ?? input.ciudad,
