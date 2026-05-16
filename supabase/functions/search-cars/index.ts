@@ -167,7 +167,9 @@ serve(async (req) => {
       const locJson = await locRes.json();
       console.log(`[cars] sky-scrapper location "${input.ciudad}":`, JSON.stringify(locJson).slice(0, 400));
       const locList: any[] = Array.isArray(locJson?.data) ? locJson.data : Array.isArray(locJson) ? locJson : [];
-      const locationId = locList[0]?.entityId ?? locList[0]?.id ?? locList[0]?.locationId ?? locList[0]?.place_id;
+      // Prefer Airport class entry, fall back to first result
+      const preferred = locList.find((l: any) => l?.class === "Airport") ?? locList[0];
+      const locationId = preferred?.entity_id ?? preferred?.entityId ?? preferred?.id ?? preferred?.locationId;
       if (!locationId) throw new Error("sky-scrapper: no locationId encontrado");
 
       // Step 2: search cars
