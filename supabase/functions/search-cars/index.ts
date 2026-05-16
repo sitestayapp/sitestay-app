@@ -256,32 +256,45 @@ serve(async (req) => {
     // ---------- FALLBACK 1: priceline-com2 ----------
     const tryPriceline = async (): Promise<any[]> => {
       const HOST_P = "priceline-com2.p.rapidapi.com";
-      const u = new URL(`https://${HOST_P}/cars/search`);
-      u.searchParams.set("pickup_latitude", String(lat));
-      u.searchParams.set("pickup_longitude", String(lng));
-      u.searchParams.set("dropoff_latitude", String(lat));
-      u.searchParams.set("dropoff_longitude", String(lng));
-      u.searchParams.set("pickup_date", pick_up_date);
-      u.searchParams.set("dropoff_date", drop_off_date);
-      u.searchParams.set("pickup_time", pick_up_time);
-      u.searchParams.set("dropoff_time", drop_off_time);
-      u.searchParams.set("currency", "EUR");
-      const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_P } });
-      if (!r.ok) throw new Error(`priceline cars ${r.status}`);
-      const j = await r.json();
-      const list = j?.data?.results ?? j?.data?.cars ?? j?.results ?? j?.cars ?? [];
-      if (!Array.isArray(list) || list.length === 0) throw new Error("priceline cars vacío");
+      // Try new endpoint first, fall back to legacy
+      const endpoints = [
+        `/api/car-rentals/v1/search`,
+        `/cars/search`,
+      ];
+      let j: any = null;
+      for (const ep of endpoints) {
+        const u = new URL(`https://${HOST_P}${ep}`);
+        u.searchParams.set("pickup_latitude", String(lat));
+        u.searchParams.set("pickup_longitude", String(lng));
+        u.searchParams.set("dropoff_latitude", String(lat));
+        u.searchParams.set("dropoff_longitude", String(lng));
+        u.searchParams.set("pickup_date", pick_up_date);
+        u.searchParams.set("dropoff_date", drop_off_date);
+        u.searchParams.set("pickup_time", pick_up_time);
+        u.searchParams.set("dropoff_time", drop_off_time);
+        u.searchParams.set("currency", "EUR");
+        const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_P } });
+        console.log(`[cars] priceline ${ep} status:`, r.status);
+        if (!r.ok) { console.warn(`[cars] priceline ${ep} failed ${r.status}`); continue; }
+        j = await r.json();
+        console.log(`[cars] priceline ${ep} sample:`, JSON.stringify(j).slice(0, 400));
+        break;
+      }
+      if (!j) throw new Error("priceline cars: todos los endpoints fallaron");
+      const list = j?.data?.results ?? j?.data?.cars ?? j?.results ?? j?.cars ??
+        j?.data?.vehicleResults ?? j?.vehicleResults ?? (Array.isArray(j?.data) ? j.data : []);
+      if (!Array.isArray(list) || list.length === 0) throw new Error(`priceline cars vacío (keys: ${Object.keys(j?.data ?? j ?? {}).join(",")})`);
       return list.slice(0, 6).map((r: any) => {
-        const total = Number(r?.totalPrice ?? r?.price?.total ?? r?.price ?? 0) || null;
+        const total = Number(r?.totalPrice ?? r?.price?.total ?? r?.price?.amount ?? r?.price ?? 0) || null;
         return {
           id: String(r?.id ?? crypto.randomUUID()),
-          model: r?.carName ?? r?.name ?? r?.vehicle?.name ?? "Vehículo",
-          group: r?.carClass ?? r?.category ?? null,
-          company: r?.partnerName ?? r?.supplier?.name ?? null,
-          company_logo: r?.partnerLogo ?? r?.supplier?.logo ?? null,
+          model: r?.carName ?? r?.name ?? r?.vehicle?.name ?? r?.vehicleName ?? "Vehículo",
+          group: r?.carClass ?? r?.category ?? r?.vehicleClass ?? null,
+          company: r?.partnerName ?? r?.vendorName ?? r?.supplier?.name ?? null,
+          company_logo: r?.partnerLogo ?? r?.vendorLogo ?? r?.supplier?.logo ?? null,
           photo: r?.imageUrl ?? r?.image ?? r?.vehicle?.image ?? null,
-          seats: r?.passengers ?? r?.seats ?? null,
-          transmission: r?.transmission ?? null,
+          seats: r?.passengers ?? r?.seats ?? r?.vehicle?.seats ?? null,
+          transmission: r?.transmission ?? r?.vehicle?.transmission ?? null,
           bags: r?.bags ?? null,
           rating: r?.rating ?? null,
           price_per_day: total ? +(total / nights).toFixed(2) : null,

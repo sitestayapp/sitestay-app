@@ -32,6 +32,13 @@ const CITY_IATA: Record<string, string> = {
 };
 
 const ES_TO_EN: Record<string, string> = {
+  // Spanish cities (same name works in English too, kept for explicit mapping)
+  "madrid": "Madrid", "barcelona": "Barcelona", "bilbao": "Bilbao",
+  "sevilla": "Seville", "málaga": "Malaga", "malaga": "Malaga",
+  "valencia": "Valencia", "alicante": "Alicante", "palma": "Palma",
+  "ibiza": "Ibiza", "tenerife": "Tenerife", "zaragoza": "Zaragoza",
+  "santiago de compostela": "Santiago de Compostela",
+  // European cities with accents/different names
   "berlín": "Berlin", "berlin": "Berlin",
   "parís": "Paris", "paris": "Paris",
   "londres": "London",
@@ -48,9 +55,13 @@ const ES_TO_EN: Record<string, string> = {
   "praga": "Prague",
   "bruselas": "Brussels",
   "ámsterdam": "Amsterdam", "amsterdam": "Amsterdam",
+  "múnich": "Munich", "munich": "Munich",
+  "varsovia": "Warsaw",
   "nueva york": "New York",
   "tokio": "Tokyo",
   "pekín": "Beijing", "pequín": "Beijing",
+  "dubái": "Dubai", "dubai": "Dubai",
+  "estambul": "Istanbul",
 };
 
 async function tryAirport(key: string, query: string, locale: string) {
@@ -110,9 +121,14 @@ serve(async (req) => {
     const fmtTime = (s?: string) => s ? new Date(s).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" }) : "";
     const fmtDur = (m?: number) => m ? `${Math.floor(m / 60)}h ${m % 60}m` : "";
 
+    const toEn = (q: string) => ES_TO_EN[q.trim().toLowerCase()] ?? q;
+
     // ---------- PRIMARY: sky-scrapper ----------
     const trySkyScrapper = async (): Promise<any[]> => {
-      const [from, to] = await Promise.all([airport(key, input.origen), airport(key, input.destino)]);
+      const origenEn = toEn(input.origen);
+      const destinoEn = toEn(input.destino);
+      console.log(`[flights] searching: "${input.origen}"→"${origenEn}", "${input.destino}"→"${destinoEn}"`);
+      const [from, to] = await Promise.all([airport(key, origenEn), airport(key, destinoEn)]);
       const u = new URL(`https://${HOST}/api/v1/flights/searchFlights`);
       u.searchParams.set("originSkyId", from.skyId);
       u.searchParams.set("destinationSkyId", to.skyId);
