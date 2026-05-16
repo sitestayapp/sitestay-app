@@ -34,10 +34,12 @@ FACTURA CORPORATIVA:
 - Solicitar siempre en todas las reservas automáticamente.
 - Indicarlo en la confirmación y en el mensaje al trabajador.
 
-BÚSQUEDA - COCHE / VUELO:
-- Para coche: si menciona "coche", "vehículo", "carro" o "transporte", llama a buscar_coches con ciudad y fechas de recogida/devolución.
+BÚSQUEDA - VUELO:
 - Para vuelo: si menciona "vuelo" o "avión", llama a buscar_vuelos con origen, destino y fecha (y fecha_vuelta si aplica).
-- Puedes llamar varias herramientas si el admin pide alojamiento + coche + vuelo en el mismo viaje.
+
+COCHES NO DISPONIBLE:
+- Si el usuario menciona "coche", "vehículo", "carro", "alquiler de coche" o "transporte", responde EXACTAMENTE: "El servicio de alquiler de coches no está disponible temporalmente. Puedo ayudarte con alojamiento y vuelos."
+- No llames ninguna herramienta para coches. No busques alternativas. Solo muestra ese mensaje.
 
 PRESENTACIÓN DE RESULTADOS:
 - Los resultados se MUESTRAN AUTOMÁTICAMENTE como tarjetas visuales. NO los enumeres en texto.
@@ -67,21 +69,6 @@ const TOOLS = [
         max_precio: { type: "number", description: "Precio máximo por noche en EUR" },
       },
       required: ["ciudad", "check_in", "check_out"],
-    },
-  },
-  {
-    name: "buscar_coches",
-    description: "Busca coches de alquiler en Booking Cars para una ciudad y fechas.",
-    input_schema: {
-      type: "object",
-      properties: {
-        ciudad: { type: "string" },
-        pick_up_date: { type: "string", description: "YYYY-MM-DD" },
-        drop_off_date: { type: "string", description: "YYYY-MM-DD" },
-        pick_up_time: { type: "string", description: "HH:MM (24h), por defecto 10:00" },
-        drop_off_time: { type: "string", description: "HH:MM (24h), por defecto 10:00" },
-      },
-      required: ["ciudad", "pick_up_date", "drop_off_date"],
     },
   },
   {
