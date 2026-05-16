@@ -283,7 +283,10 @@ serve(async (req) => {
       if (!j) throw new Error("priceline cars: todos los endpoints fallaron");
       const list = j?.data?.results ?? j?.data?.cars ?? j?.results ?? j?.cars ??
         j?.data?.vehicleResults ?? j?.vehicleResults ?? (Array.isArray(j?.data) ? j.data : []);
-      if (!Array.isArray(list) || list.length === 0) throw new Error(`priceline cars vacío (keys: ${Object.keys(j?.data ?? j ?? {}).join(",")})`);
+      if (!Array.isArray(list) || list.length === 0) {
+        const errDetail = j?.errors?.[0]?.message ?? j?.message ?? JSON.stringify(j).slice(0, 200);
+        throw new Error(`priceline cars vacío. data keys: ${Object.keys(j?.data ?? {}).join(",") || "none"}. msg: ${errDetail}`);
+      }
       return list.slice(0, 6).map((r: any) => {
         const total = Number(r?.totalPrice ?? r?.price?.total ?? r?.price?.amount ?? r?.price ?? 0) || null;
         return {

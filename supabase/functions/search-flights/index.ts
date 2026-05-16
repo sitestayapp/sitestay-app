@@ -177,19 +177,23 @@ serve(async (req) => {
     // ---------- FALLBACK 1: priceline-com2 ----------
     const tryPriceline = async (): Promise<any[]> => {
       const HOST_P = "priceline-com2.p.rapidapi.com";
+      const originCode = CITY_IATA[input.origen.toLowerCase()] ?? input.origen;
+      const destCode = CITY_IATA[input.destino.toLowerCase()] ?? input.destino;
       const path = input.fecha_vuelta ? "/flights/search-roundtrip" : "/flights/search-oneway";
       const u = new URL(`https://${HOST_P}${path}`);
-      u.searchParams.set("origin", input.origen);
-      u.searchParams.set("destination", input.destino);
+      u.searchParams.set("origin", originCode);
+      u.searchParams.set("destination", destCode);
       u.searchParams.set("departureDate", input.fecha_salida);
       if (input.fecha_vuelta) u.searchParams.set("returnDate", input.fecha_vuelta);
       u.searchParams.set("adults", String(adults));
       u.searchParams.set("currency", "EUR");
       const r = await fetch(u, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_P } });
+      console.log(`[flights] priceline ${path} status:`, r.status);
       if (!r.ok) throw new Error(`priceline flights ${r.status}`);
       const j = await r.json();
+      console.log("[flights] priceline sample:", JSON.stringify(j).slice(0, 400));
       const list = j?.data?.itineraries ?? j?.data?.results ?? j?.itineraries ?? j?.results ?? [];
-      if (!Array.isArray(list) || list.length === 0) throw new Error("priceline flights vacío");
+      if (!Array.isArray(list) || list.length === 0) throw new Error(`priceline flights vacío (keys: ${Object.keys(j?.data ?? j ?? {}).join(",")})`);
       return list.slice(0, 6).map((it: any) => {
         const segs = it?.slices?.[0]?.segments ?? it?.segments ?? [];
         const first = segs[0] ?? {};
@@ -199,8 +203,8 @@ serve(async (req) => {
           id: String(it?.id ?? crypto.randomUUID()),
           airline: first?.carrier?.name ?? first?.airline ?? "Aerolínea",
           airline_logo: first?.carrier?.logo ?? null,
-          origin: first?.origin?.code ?? input.origen,
-          destination: last?.destination?.code ?? input.destino,
+          origin: first?.origin?.code ?? originCode,
+          destination: last?.destination?.code ?? destCode,
           depart_time: fmtTime(first?.departureTime),
           arrive_time: fmtTime(last?.arrivalTime),
           duration: fmtDur(it?.slices?.[0]?.duration ?? it?.duration),
