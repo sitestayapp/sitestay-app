@@ -299,7 +299,7 @@ serve(async (req) => {
       ["expedia13", tryExpedia],
     ];
     let items: any[] = [];
-    let lastErr: string = "";
+    const errs: string[] = [];
     for (const [name, fn] of providers) {
       try {
         items = await fn();
@@ -307,13 +307,15 @@ serve(async (req) => {
           console.log(`[cars] ✅ provider responded: ${name} (${items.length} results)`);
           break;
         }
+        errs.push(`${name}: vacío`);
       } catch (e) {
-        lastErr = e instanceof Error ? e.message : String(e);
-        console.warn(`[cars] ${name} failed:`, lastErr);
+        const msg = e instanceof Error ? e.message : String(e);
+        errs.push(`${name}: ${msg}`);
+        console.warn(`[cars] ${name} failed:`, msg);
       }
     }
     if (items.length === 0) {
-      return new Response(JSON.stringify({ results: [], error: `No hay coches disponibles. Último error: ${lastErr || "sin detalles"}` }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ results: [], error: errs.join(" | ") }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     return new Response(JSON.stringify({ results: items }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
   } catch (e) {
