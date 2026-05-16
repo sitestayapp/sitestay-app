@@ -154,7 +154,63 @@ serve(async (req) => {
 
     const nights = Math.max(1, Math.round((new Date(drop_off_date).getTime() - new Date(pick_up_date).getTime()) / 86400000));
 
-    // ---------- PROVIDER 0: booking-com (Tipsters) ----------
+    // ---------- PROVIDER 0: sky-scrapper ----------
+    const trySkyScrapper = async (): Promise<any[]> => {
+      const HOST_SS = "sky-scrapper.p.rapidapi.com";
+      const ssHeaders = { "x-rapidapi-key": key, "x-rapidapi-host": HOST_SS };
+
+      // Step 1: resolve locationId
+      const locUrl = new URL(`https://${HOST_SS}/api/v1/cars/searchLocation`);
+      locUrl.searchParams.set("query", input.ciudad);
+      const locRes = await fetch(locUrl, { headers: ssHeaders });
+      if (!locRes.ok) throw new Error(`sky-scrapper searchLocation ${locRes.status}`);
+      const locJson = await locRes.json();
+      console.log(`[cars] sky-scrapper location "${input.ciudad}":`, JSON.stringify(locJson).slice(0, 400));
+      const locList: any[] = Array.isArray(locJson?.data) ? locJson.data : Array.isArray(locJson) ? locJson : [];
+      const locationId = locList[0]?.entityId ?? locList[0]?.id ?? locList[0]?.locationId ?? locList[0]?.place_id;
+      if (!locationId) throw new Error("sky-scrapper: no locationId encontrado");
+
+      // Step 2: search cars
+      const searchUrl = new URL(`https://${HOST_SS}/api/v1/cars/searchCars`);
+      searchUrl.searchParams.set("locationId", String(locationId));
+      searchUrl.searchParams.set("pickUpDate", pick_up_date);
+      searchUrl.searchParams.set("dropOffDate", drop_off_date);
+      searchUrl.searchParams.set("pickUpTime", pick_up_time);
+      searchUrl.searchParams.set("dropOffTime", drop_off_time);
+      const searchRes = await fetch(searchUrl, { headers: ssHeaders });
+      if (!searchRes.ok) throw new Error(`sky-scrapper searchCars ${searchRes.status}`);
+      const searchJson = await searchRes.json();
+      console.log(`[cars] sky-scrapper searchCars sample:`, JSON.stringify(searchJson).slice(0, 600));
+      const list: any[] =
+        searchJson?.data?.results ?? searchJson?.data?.cars ?? searchJson?.data?.offers ??
+        searchJson?.results ?? searchJson?.cars ?? (Array.isArray(searchJson?.data) ? searchJson.data : []);
+      if (!Array.isArray(list) || list.length === 0) throw new Error("sky-scrapper: sin resultados");
+      return list.slice(0, 6).map((r: any) => {
+        const v = r?.vehicle ?? r?.car ?? {};
+        const price = r?.price?.amount ?? r?.price?.total ?? r?.price ?? r?.totalPrice ?? null;
+        const total = price != null ? Number(price) : null;
+        return {
+          id: String(r?.id ?? crypto.randomUUID()),
+          model: v?.name ?? r?.name ?? r?.carName ?? "Vehículo",
+          group: v?.category ?? r?.category ?? null,
+          company: r?.supplier?.name ?? r?.company ?? r?.vendorName ?? null,
+          company_logo: r?.supplier?.logo ?? r?.vendorLogo ?? null,
+          photo: v?.image ?? r?.imageUrl ?? r?.image ?? null,
+          seats: v?.seats ?? r?.seats ?? null,
+          transmission: v?.transmission ?? r?.transmission ?? null,
+          bags: v?.bags ?? r?.bags ?? null,
+          rating: r?.rating ?? null,
+          price_per_day: total ? +(total / nights).toFixed(2) : null,
+          price_total: total,
+          currency: "EUR",
+          pick_up_date, drop_off_date,
+          location: destName ?? input.ciudad,
+          url: r?.deepLink ?? r?.url ?? null,
+        };
+      });
+    };
+
+    // ---------- PROVIDER 1: booking-com (Tipsters) ----------
     const tryTipstersCars = async (): Promise<any[]> => {
       const HOST_T = "booking-com.p.rapidapi.com";
       const url = new URL(`https://${HOST_T}/v1/cars/search`);
@@ -345,6 +401,7 @@ serve(async (req) => {
     };
 
     const providers: Array<[string, () => Promise<any[]>]> = [
+      ["sky-scrapper", trySkyScrapper],
       ["booking-com (Tipsters)", tryTipstersCars],
       ["booking-com15", tryBookingCars],
       ["priceline-com2", tryPriceline],
