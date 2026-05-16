@@ -10,9 +10,16 @@ type SearchInput = {
   check_in: string; // YYYY-MM-DD
   check_out: string; // YYYY-MM-DD
   adultos?: number;
+  habitaciones?: number;
   tipo?: "hotel" | "apartamento";
   max_precio?: number;
 };
+
+const HOSTEL_KEYWORDS = /hostel|albergue|backpacker|dormitor[yi]|dorm\b|youth hostel/i;
+
+function excludeHostels(items: any[]): any[] {
+  return items.filter((i) => !HOSTEL_KEYWORDS.test(i.name ?? ""));
+}
 
 async function searchBooking(key: string, q: SearchInput) {
   const adults = q.adultos ?? 1;
@@ -40,11 +47,17 @@ async function searchBooking(key: string, q: SearchInput) {
   url.searchParams.set("arrival_date", q.check_in);
   url.searchParams.set("departure_date", q.check_out);
   url.searchParams.set("adults", String(adults));
-  url.searchParams.set("room_qty", "1");
+  url.searchParams.set("room_qty", String(q.habitaciones ?? 1));
   url.searchParams.set("page_number", "1");
   url.searchParams.set("currency_code", "EUR");
   url.searchParams.set("languagecode", "es");
-  if (q.tipo === "apartamento") url.searchParams.set("categories_filter", "property_type::201");
+  if (q.tipo === "apartamento") {
+    // 201=Apartments, exclude 203=Hostels
+    url.searchParams.set("categories_filter_ids", "property_type::201");
+  } else {
+    // For general/hotel: exclude hostels and private rooms in shared spaces
+    url.searchParams.set("categories_filter_ids", "property_type::204,property_type::208,property_type::213,property_type::201");
+  }
 
   const res = await fetch(url, {
     headers: { "x-rapidapi-key": key, "x-rapidapi-host": "booking-com15.p.rapidapi.com" },
@@ -98,9 +111,10 @@ async function searchBooking(key: string, q: SearchInput) {
     };
   });
 
+  const filtered = excludeHostels(items);
   return q.max_precio
-    ? items.filter((i: any) => !i.price_per_night || i.price_per_night <= q.max_precio!)
-    : items;
+    ? filtered.filter((i: any) => !i.price_per_night || i.price_per_night <= q.max_precio!)
+    : filtered;
 }
 
 async function searchAirbnb(key: string, q: SearchInput) {
@@ -194,19 +208,20 @@ async function searchBookingTipsters(key: string, q: SearchInput) {
   url.searchParams.set("checkin_date", q.check_in);
   url.searchParams.set("checkout_date", q.check_out);
   url.searchParams.set("adults_number", String(adults));
-  url.searchParams.set("room_number", "1");
+  url.searchParams.set("room_number", String(q.habitaciones ?? 1));
   url.searchParams.set("order_by", "price");
   url.searchParams.set("filter_by_currency", "EUR");
   url.searchParams.set("locale", "es");
   url.searchParams.set("units", "metric");
   url.searchParams.set("page_number", "0");
+  if (q.tipo === "apartamento") url.searchParams.set("categories_filter_ids", "property_type::201");
   const res = await fetch(url, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_T } });
   if (!res.ok) throw new Error(`Tipsters search ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const json = await res.json();
   const hotels = json?.result ?? json?.results ?? json?.data ?? [];
   console.log(`[fallback1/booking-tipsters] found: ${hotels.length}`);
   const nights = Math.max(1, Math.round((new Date(q.check_out).getTime() - new Date(q.check_in).getTime()) / 86400000));
-  return (Array.isArray(hotels) ? hotels : []).slice(0, 12).map((h: any) => {
+  const mapped = (Array.isArray(hotels) ? hotels : []).slice(0, 12).map((h: any) => {
     const total = h?.min_total_price ?? h?.price_breakdown?.gross_price ?? null;
     const perNight = total ? +(Number(total) / nights).toFixed(2) : null;
     return {
@@ -227,6 +242,7 @@ async function searchBookingTipsters(key: string, q: SearchInput) {
       tipo: q.tipo ?? "hotel",
     };
   });
+  return excludeHostels(mapped);
 }
 
 // ---------- FALLBACK 2: tripadvisor-com1 (Things4u) ----------

@@ -24,11 +24,12 @@ COMPORTAMIENTO:
 - Una vez tengas ciudad + fechas → LLAMA buscar_alojamientos SIN ESPERAR MÁS.
 - Responde en el idioma del admin.
 
-TIPO DE ALOJAMIENTO:
+TIPO DE ALOJAMIENTO Y HABITACIONES:
 - Si el usuario menciona "apartamento", usa tipo=apartamento.
 - Si menciona "hotel", usa tipo=hotel.
 - Si no menciona ninguno, llama buscar_alojamientos sin campo tipo (búsqueda general).
-- No preguntes el tipo antes de buscar.
+- Si menciona número de habitaciones (ej. "2 habitaciones", "3 dormitorios"), extrae el número y pásalo como habitaciones=N.
+- No preguntes el tipo ni las habitaciones antes de buscar.
 
 FACTURA CORPORATIVA:
 - Solicitar siempre en todas las reservas automáticamente.
@@ -65,6 +66,7 @@ const TOOLS = [
         check_in: { type: "string", description: "YYYY-MM-DD" },
         check_out: { type: "string", description: "YYYY-MM-DD" },
         adultos: { type: "number" },
+        habitaciones: { type: "number", description: "Número de habitaciones requeridas" },
         tipo: { type: "string", enum: ["hotel", "apartamento"] },
         max_precio: { type: "number", description: "Precio máximo por noche en EUR" },
       },
