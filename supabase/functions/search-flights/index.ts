@@ -15,6 +15,22 @@ type In = {
   adultos?: number;
 };
 
+const CITY_IATA: Record<string, string> = {
+  "madrid": "MAD", "barcelona": "BCN", "bilbao": "BIO", "sevilla": "SVQ",
+  "málaga": "AGP", "malaga": "AGP", "valencia": "VLC", "alicante": "ALC",
+  "palma": "PMI", "ibiza": "IBZ", "tenerife": "TFS", "gran canaria": "LPA",
+  "zaragoza": "ZAZ", "santiago": "SCQ", "asturias": "OVD", "murcia": "MJV",
+  "paris": "CDG", "parís": "CDG", "london": "LHR", "londres": "LHR",
+  "berlin": "BER", "berlín": "BER", "amsterdam": "AMS", "ámsterdam": "AMS",
+  "rome": "FCO", "roma": "FCO", "milan": "MXP", "milán": "MXP",
+  "lisbon": "LIS", "lisboa": "LIS", "vienna": "VIE", "viena": "VIE",
+  "munich": "MUC", "múnich": "MUC", "frankfurt": "FRA", "zurich": "ZRH",
+  "zúrich": "ZRH", "brussels": "BRU", "bruselas": "BRU", "prague": "PRG",
+  "praga": "PRG", "warsaw": "WAW", "varsovia": "WAW", "athens": "ATH",
+  "atenas": "ATH", "new york": "JFK", "nueva york": "JFK", "tokyo": "NRT",
+  "tokio": "NRT", "dubai": "DXB", "istanbul": "IST", "estambul": "IST",
+};
+
 const ES_TO_EN: Record<string, string> = {
   "berlín": "Berlin", "berlin": "Berlin",
   "parís": "Paris", "paris": "Paris",
@@ -57,19 +73,27 @@ async function tryAirport(key: string, query: string, locale: string) {
 }
 
 async function airport(key: string, query: string) {
+  const lower = query.trim().toLowerCase();
+  // Try city name in both locales
   let found = await tryAirport(key, query, "es-ES");
   if (found) return found;
-  // Fallback: English locale
   found = await tryAirport(key, query, "en-US");
   if (found) return found;
-  // Fallback: translate Spanish city → English name
-  const en = ES_TO_EN[query.trim().toLowerCase()];
-  if (en && en.toLowerCase() !== query.trim().toLowerCase()) {
+  // Try English translation
+  const en = ES_TO_EN[lower];
+  if (en && en.toLowerCase() !== lower) {
     console.log(`[flights] retrying with English name: ${en}`);
     found = await tryAirport(key, en, "en-US");
     if (found) return found;
   }
-  throw new Error(`Sin aeropuerto para "${query}"`);
+  // Try IATA code directly
+  const iata = CITY_IATA[lower];
+  if (iata) {
+    console.log(`[flights] retrying with IATA code: ${iata}`);
+    found = await tryAirport(key, iata, "en-US");
+    if (found) return found;
+  }
+  throw new Error(`Sin aeropuerto para "${query}" (probados: nombre, traducción, IATA ${iata ?? "N/A"})`);
 }
 
 serve(async (req) => {

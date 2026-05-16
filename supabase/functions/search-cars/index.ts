@@ -294,9 +294,9 @@ serve(async (req) => {
     };
 
     const providers: Array<[string, () => Promise<any[]>]> = [
-      ["booking-com15", tryBookingCars],
       ["priceline-com2", tryPriceline],
       ["expedia13", tryExpedia],
+      ["booking-com15", tryBookingCars],  // last: prone to 429 on free tier
     ];
     let items: any[] = [];
     const errs: string[] = [];
