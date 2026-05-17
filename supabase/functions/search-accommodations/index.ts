@@ -87,33 +87,49 @@ async function searchBooking(key: string, q: SearchInput) {
     Math.round((new Date(q.check_out).getTime() - new Date(q.check_in).getTime()) / (1000 * 60 * 60 * 24)),
   );
 
+  // country code from destination (cc1 = "es", "fr", etc.)
+  const cc = (dest?.cc1 ?? dest?.country_code ?? "es").toLowerCase().slice(0, 2);
+
+  const toSlug = (name: string) =>
+    name.toLowerCase()
+      .normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
   const items = hotels.slice(0, 12).map((h: any) => {
     const p = h?.property ?? {};
     const total = p?.priceBreakdown?.grossPrice?.value ?? null;
     const perNight = total ? +(total / nights).toFixed(2) : null;
     const hotelId = p?.id ?? h?.hotel_id;
+    const hotelName = p?.name ?? h?.hotel_name ?? "";
+    // wishlistName is Booking's own URL slug when present
+    const slug = p?.wishlistName ?? toSlug(hotelName);
+    const hotelUrl = slug
+      ? `https://www.booking.com/hotel/${cc}/${slug}.html?checkin=${q.check_in}&checkout=${q.check_out}&group_adults=${adults}`
+      : `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(hotelName)}&checkin=${q.check_in}&checkout=${q.check_out}&group_adults=${adults}`;
     return {
       provider: "booking",
       id: String(hotelId ?? crypto.randomUUID()),
-      name: p?.name ?? h?.hotel_name ?? "Sin nombre",
+      name: hotelName || "Sin nombre",
       price_per_night: perNight,
       price_total: total ? +total.toFixed(2) : null,
       currency: p?.priceBreakdown?.grossPrice?.currency ?? "EUR",
       rating: p?.reviewScore ?? h?.review_score ?? null,
       reviews: p?.reviewCount ?? h?.review_nr ?? null,
-      address: h?.address ?? p?.wishlistName ?? q.ciudad,
+      address: h?.address ?? q.ciudad,
       checkin: q.check_in,
       checkout: q.check_out,
       cancelacion_gratis: !!p?.isFreeCancellable,
       photos: Array.isArray(p?.photoUrls) ? p.photoUrls : (h?.main_photo_url ? [h.main_photo_url] : []),
-      url: hotelId ? `https://www.booking.com/hotel/-/-/${hotelId}.html` : null,
+      url: hotelUrl,
       tipo: q.tipo ?? "hotel",
     };
   });
 
-  const filtered = excludeHostels(items);
+  // Only return results with a confirmed price (= available for these dates)
+  const available = items.filter((i: any) => i.price_per_night !== null && i.price_per_night > 0);
+  const filtered = excludeHostels(available);
   return q.max_precio
-    ? filtered.filter((i: any) => !i.price_per_night || i.price_per_night <= q.max_precio!)
+    ? filtered.filter((i: any) => i.price_per_night <= q.max_precio!)
     : filtered;
 }
 
@@ -201,6 +217,7 @@ async function searchBookingTipsters(key: string, q: SearchInput) {
   if (!loc) throw new Error(`Tipsters sin destino para "${q.ciudad}"`);
   const destId = loc?.dest_id ?? loc?.id;
   const destType = loc?.dest_type ?? "city";
+  const ccT = (loc?.cc1 ?? loc?.country_code ?? "es").toLowerCase().slice(0, 2);
 
   const url = new URL(`https://${HOST_T}/v1/hotels/search`);
   url.searchParams.set("dest_id", String(destId));
@@ -221,13 +238,21 @@ async function searchBookingTipsters(key: string, q: SearchInput) {
   const hotels = json?.result ?? json?.results ?? json?.data ?? [];
   console.log(`[fallback1/booking-tipsters] found: ${hotels.length}`);
   const nights = Math.max(1, Math.round((new Date(q.check_out).getTime() - new Date(q.check_in).getTime()) / 86400000));
+  const toSlugT = (name: string) =>
+    name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
   const mapped = (Array.isArray(hotels) ? hotels : []).slice(0, 12).map((h: any) => {
     const total = h?.min_total_price ?? h?.price_breakdown?.gross_price ?? null;
     const perNight = total ? +(Number(total) / nights).toFixed(2) : null;
+    const hotelName = h?.hotel_name ?? "";
+    const slug = h?.url_name ?? toSlugT(hotelName);
+    const hotelUrl = h?.url
+      ?? (slug ? `https://www.booking.com/hotel/${ccT}/${slug}.html?checkin=${q.check_in}&checkout=${q.check_out}&group_adults=${adults}` : null)
+      ?? `https://www.booking.com/searchresults.html?ss=${encodeURIComponent(hotelName)}&checkin=${q.check_in}&checkout=${q.check_out}&group_adults=${adults}`;
     return {
       provider: "booking",
       id: String(h?.hotel_id ?? crypto.randomUUID()),
-      name: h?.hotel_name ?? "Hotel",
+      name: hotelName || "Hotel",
       price_per_night: perNight,
       price_total: total ? +Number(total).toFixed(2) : null,
       currency: h?.currencycode ?? "EUR",
@@ -238,11 +263,12 @@ async function searchBookingTipsters(key: string, q: SearchInput) {
       checkout: q.check_out,
       cancelacion_gratis: !!h?.is_free_cancellable,
       photos: h?.main_photo_url ? [h.main_photo_url] : [],
-      url: h?.url ?? null,
+      url: hotelUrl,
       tipo: q.tipo ?? "hotel",
     };
   });
-  return excludeHostels(mapped);
+  const availableT = mapped.filter((i: any) => i.price_per_night !== null && i.price_per_night > 0);
+  return excludeHostels(availableT);
 }
 
 // ---------- FALLBACK 2: tripadvisor-com1 (Things4u) ----------
