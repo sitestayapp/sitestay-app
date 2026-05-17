@@ -226,12 +226,12 @@ async function searchBookingTipsters(key: string, q: SearchInput) {
   url.searchParams.set("checkout_date", q.check_out);
   url.searchParams.set("adults_number", String(adults));
   url.searchParams.set("room_number", String(q.habitaciones ?? 1));
-  url.searchParams.set("order_by", "price");
+  url.searchParams.set("order_by", "bayesian_review_score");
   url.searchParams.set("filter_by_currency", "EUR");
   url.searchParams.set("locale", "es");
   url.searchParams.set("units", "metric");
   url.searchParams.set("page_number", "0");
-  if (q.tipo === "apartamento") url.searchParams.set("categories_filter_ids", "property_type::201");
+  // categories_filter_ids is a booking-com15 param — not supported on Tipsters v1
   const res = await fetch(url, { headers: { "x-rapidapi-key": key, "x-rapidapi-host": HOST_T } });
   if (!res.ok) throw new Error(`Tipsters search ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const json = await res.json();
@@ -241,7 +241,7 @@ async function searchBookingTipsters(key: string, q: SearchInput) {
   const toSlugT = (name: string) =>
     name.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-  const mapped = (Array.isArray(hotels) ? hotels : []).slice(0, 12).map((h: any) => {
+  const mapped = (Array.isArray(hotels) ? hotels : []).slice(0, 25).map((h: any) => {
     const total = h?.min_total_price ?? h?.price_breakdown?.gross_price ?? null;
     const perNight = total ? +(Number(total) / nights).toFixed(2) : null;
     const hotelName = h?.hotel_name ?? "";
@@ -268,7 +268,7 @@ async function searchBookingTipsters(key: string, q: SearchInput) {
     };
   });
   const availableT = mapped.filter((i: any) => i.price_per_night !== null && i.price_per_night > 0);
-  return excludeHostels(availableT);
+  return excludeHostels(availableT).slice(0, 12);
 }
 
 // ---------- FALLBACK 2: tripadvisor-com1 (Things4u) ----------
